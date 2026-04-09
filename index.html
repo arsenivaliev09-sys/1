@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>НевКонтакте</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-box">НВ</div>
+      <div class="logo-text">НевКонтакте</div>
+    </div>
+
+    <div class="topbar-center">
+      <input class="search-input" type="text" placeholder="Поиск" />
+    </div>
+
+    <div class="topbar-right">
+      <img class="user-avatar" src="https://placehold.co/34x34/d0d6e3/2f4a7a?text=ИИ" alt="Аватар" />
+      <span class="user-name">Иван Иванов</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="frame sidebar-frame">
+      <nav class="sidebar-nav" id="sidebarNav">
+        <button class="menu-item active" data-tab="profileTab">Моя страница</button>
+        <button class="menu-item" data-tab="chatsTab">Чаты</button>
+        <button class="menu-item" data-tab="channelsTab">Каналы</button>
+        <button class="menu-item" data-tab="contactsTab">Контакты</button>
+      </nav>
+
+      <div class="sidebar-actions">
+        <button class="action-btn">Создать группу</button>
+        <button class="action-btn">Создать канал</button>
+      </div>
+    </aside>
+
+    <section class="frame content-frame">
+      <div class="tab-content active" id="profileTab">
+        <section class="block profile-block">
+          <img class="profile-avatar" src="https://placehold.co/120x120/d7dbe5/2f4a7a?text=Фото" alt="Фото профиля" />
+          <div class="profile-main">
+            <h1>Иван Иванов</h1>
+            <div class="profile-buttons">
+              <button class="secondary-btn">Изменить профиль</button>
+              <button class="secondary-btn">Редактировать описание</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="block about-block">
+          <div class="block-title-row">
+            <h2>О себе</h2>
+            <button class="small-edit-btn">Редактировать</button>
+          </div>
+          <p>Люблю технологии, музыку и старый добрый интернет. Здесь можно написать любую информацию о себе в духе ВК 2010 года.</p>
+        </section>
+
+        <section class="block post-add-block">
+          <button class="primary-btn">+ Добавить пост</button>
+        </section>
+
+        <section class="block wall-block">
+          <h2>Стена</h2>
+          <article class="post-card">
+            <div class="post-header">
+              <strong>Иван Иванов</strong>
+              <span>9 апреля 2026</span>
+            </div>
+            <p>Запустил новый проект "НевКонтакте". Возвращаем ламповую атмосферу!</p>
+          </article>
+          <article class="post-card">
+            <div class="post-header">
+              <strong>Иван Иванов</strong>
+              <span>8 апреля 2026</span>
+            </div>
+            <p>Сегодня добавил разделы чатов, каналов и контактов. Строго, компактно, удобно.</p>
+          </article>
+        </section>
+      </div>
+
+      <div class="tab-content" id="chatsTab">
+        <div class="tabs-frame-grid">
+          <div class="dialogs-list">
+            <h2>Диалоги</h2>
+            <div class="dialog-item active">
+              <img src="https://placehold.co/44x44/e2e6ef/2f4a7a?text=АМ" alt="" />
+              <div>
+                <strong>Анна Морозова</strong>
+                <p>Привет! Как дела с проектом?</p>
+              </div>
+            </div>
+            <div class="dialog-item">
+              <img src="https://placehold.co/44x44/e2e6ef/2f4a7a?text=ДК" alt="" />
+              <div>
+                <strong>Дмитрий Ковалёв</strong>
+                <p>Скинь, пожалуйста, материалы.</p>
+              </div>
+            </div>
+            <div class="dialog-item">
+              <img src="https://placehold.co/44x44/e2e6ef/2f4a7a?text=ЕП" alt="" />
+              <div>
+                <strong>Елена Петрова</strong>
+                <p>Завтра созвонимся?</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-window">
+            <h2>Чат с Анной Морозовой</h2>
+            <div class="messages">
+              <div class="message incoming">Привет! Как дела с проектом?</div>
+              <div class="message outgoing">Привет! Почти готово, скоро покажу.</div>
+              <div class="message incoming">Отлично, жду обновлений 🙂</div>
+            </div>
+            <div class="chat-input-row">
+              <input type="text" placeholder="Введите сообщение" />
+              <button class="primary-btn">Отправить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="channelsTab">
+        <section class="channels-list">
+          <h2>Каналы</h2>
+          <div class="channel-item">
+            <strong>Новости НевКонтакте</strong>
+            <p>Обновления платформы и анонсы.</p>
+          </div>
+          <div class="channel-item">
+            <strong>Музыка 24/7</strong>
+            <p>Подборки музыки и обсуждения.</p>
+          </div>
+          <div class="channel-item">
+            <strong>Технологии и код</strong>
+            <p>Новости IT, гайды и статьи.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="tab-content" id="contactsTab">
+        <section class="contacts-list">
+          <h2>Контакты</h2>
+          <div class="friend-item">
+            <img src="https://placehold.co/48x48/e2e6ef/2f4a7a?text=АК" alt="" />
+            <span>Алексей Кузнецов</span>
+          </div>
+          <div class="friend-item">
+            <img src="https://placehold.co/48x48/e2e6ef/2f4a7a?text=МС" alt="" />
+            <span>Мария Смирнова</span>
+          </div>
+          <div class="friend-item">
+            <img src="https://placehold.co/48x48/e2e6ef/2f4a7a?text=ОЛ" alt="" />
+            <span>Олег Лебедев</span>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
