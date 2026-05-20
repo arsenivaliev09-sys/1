@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>НевКонтакте</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">НВ</div>
+        <span class="brand-name">НевКонтакте</span>
+      </div>
+
+      <label class="search" aria-label="Поиск">
+        <span class="search-icon">🔎</span>
+        <input type="text" placeholder="Поиск по НевКонтакте" />
+      </label>
+
+      <div class="profile-mini">
+        <img src="https://api.dicebear.com/9.x/avataaars/svg?seed=NevUser" alt="Аватар пользователя" />
+        <span>Анна Невская</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <nav class="menu" id="menu">
+          <button class="menu-item active" data-tab="profile">🏠 <span>Моя страница</span></button>
+          <button class="menu-item" data-tab="chats">💬 <span>Чаты</span></button>
+          <button class="menu-item" data-tab="channels">📢 <span>Каналы</span></button>
+          <button class="menu-item" data-tab="contacts">👥 <span>Контакты</span></button>
+        </nav>
+
+        <div class="sidebar-actions">
+          <button class="ghost-btn">+ Создать группу</button>
+          <button class="ghost-btn">+ Создать канал</button>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div class="tab-content active" id="profile">
+          <article class="card profile-card">
+            <img class="avatar-lg" src="https://api.dicebear.com/9.x/avataaars/svg?seed=NevMain" alt="Аватар" />
+            <div>
+              <h1>Анна Невская</h1>
+              <button class="secondary-btn">Редактировать профиль</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>О себе</h2>
+              <button class="icon-btn" aria-label="Редактировать описание">✏️</button>
+            </div>
+            <p>
+              Люблю дизайн, технологии и длинные прогулки по Невскому. Здесь делюсь мыслями,
+              фотографиями и новостями.
+            </p>
+          </article>
+
+          <button class="primary-btn">+ Добавить пост</button>
+
+          <div class="feed">
+            <article class="card post">
+              <div class="post-head">
+                <strong>Анна Невская</strong>
+                <span>9 апреля 2026</span>
+              </div>
+              <p>Запустили новый интерфейс НевКонтакте — стало больше воздуха и удобнее навигация.</p>
+            </article>
+
+            <article class="card post">
+              <div class="post-head">
+                <strong>Анна Невская</strong>
+                <span>8 апреля 2026</span>
+              </div>
+              <p>Ищу вдохновение для новых каналов о продуктивности. Что вам интересно читать?</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="tab-content" id="chats">
+          <div class="chats-layout card">
+            <aside class="chat-list">
+              <h2>Диалоги</h2>
+              <div class="chat-item active">💡 Дизайн-команда</div>
+              <div class="chat-item">🧠 AI Клуб</div>
+              <div class="chat-item">🎨 UI Talks</div>
+              <div class="chat-item">👋 Мария</div>
+              <div class="chat-item">🚀 Стартап чат</div>
+            </aside>
+
+            <section class="chat-window">
+              <header class="chat-header">💡 Дизайн-команда</header>
+              <div class="messages">
+                <div class="bubble incoming">Всем привет! Готовим новый макет к вечеру.</div>
+                <div class="bubble outgoing">Отлично, я доделаю состояния карточек и ховеры.</div>
+                <div class="bubble incoming">Супер, жду в общем канале 👍</div>
+              </div>
+              <form class="chat-input" onsubmit="return false">
+                <input type="text" placeholder="Написать сообщение..." />
+                <button type="submit">➤</button>
+              </form>
+            </section>
+          </div>
+        </div>
+
+        <div class="tab-content" id="channels">
+          <h2>Каналы</h2>
+          <div class="channel-grid">
+            <article class="card channel-card">
+              <h3>Технологии Невы</h3>
+              <p>Новости IT, стартапы и полезные подборки.</p>
+            </article>
+            <article class="card channel-card">
+              <h3>Город и люди</h3>
+              <p>Истории, события и жизнь Санкт-Петербурга.</p>
+            </article>
+            <article class="card channel-card">
+              <h3>НевДизайн</h3>
+              <p>Тренды интерфейсов, UX-советы и кейсы.</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="tab-content" id="contacts">
+          <h2>Контакты</h2>
+          <div class="contacts-list">
+            <article class="card contact-item"><span>🧑‍💼</span> Сергей Ильин</article>
+            <article class="card contact-item"><span>👩‍💻</span> Мария Тихонова</article>
+            <article class="card contact-item"><span>🧑‍🎨</span> Павел Романов</article>
+            <article class="card contact-item"><span>👨‍🔬</span> Алексей Ким</article>
+          </div>
+        </div>
+      </section>
+
+      <aside class="rightbar">
+        <article class="card">
+          <h3>Рекомендации</h3>
+          <ul>
+            <li>Подписаться на «НевДизайн»</li>
+            <li>Добавить 3 новых контакта</li>
+            <li>Заполнить профиль на 100%</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Сегодня</h3>
+          <p>Встреча команды в 17:30</p>
+          <p>Новый пост в «Технологии Невы»</p>
+        </article>
+      </aside>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
