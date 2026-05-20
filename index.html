@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>НевКонтакте — Сообщения</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner container">
+        <a href="#" class="logo" aria-label="НевКонтакте">НевКонтакте</a>
+        <form class="search" role="search">
+          <input type="search" placeholder="Поиск" aria-label="Поиск" />
+        </form>
+        <a href="#" class="mini-profile" aria-label="Профиль пользователя">
+          <img
+            src="https://placehold.co/32x32/8aa0c9/ffffff?text=НК"
+            alt="Аватар"
+          />
+          <span>Николай</span>
+        </a>
+      </div>
+    </header>
+
+    <main class="layout container">
+      <aside class="sidebar card" aria-label="Боковое меню">
+        <nav class="menu">
+          <a href="#" class="menu__item">Моя страница</a>
+          <a href="#" class="menu__item menu__item--active">Сообщения</a>
+          <a href="#" class="menu__item">Чаты</a>
+          <a href="#" class="menu__item">Каналы</a>
+          <a href="#" class="menu__item">Контакты</a>
+        </nav>
+
+        <div class="sidebar__actions">
+          <button class="btn btn--secondary" type="button">Создать группу</button>
+          <button class="btn btn--secondary" type="button">Создать канал</button>
+        </div>
+      </aside>
+
+      <section class="messages card" aria-label="Раздел сообщений">
+        <h1 class="section-title">Сообщения</h1>
+        <div class="messages__content">
+          <aside class="dialogs" aria-label="Список диалогов">
+            <button class="dialog dialog--active" type="button" data-user="Алина">
+              <strong>Алина</strong>
+              <span>Ты будешь сегодня онлайн?</span>
+            </button>
+            <button class="dialog" type="button" data-user="Игорь">
+              <strong>Игорь</strong>
+              <span>Скинь, пожалуйста, макет.</span>
+            </button>
+            <button class="dialog" type="button" data-user="Клуб Невского">
+              <strong>Клуб Невского</strong>
+              <span>Новая встреча в субботу.</span>
+            </button>
+          </aside>
+
+          <div class="chat" aria-live="polite">
+            <header class="chat__header">Диалог с <span id="chatUser">Алина</span></header>
+
+            <div class="chat__messages" id="chatMessages">
+              <article class="message message--incoming">
+                <p>Привет! Слушай, ты сможешь проверить новую страницу?</p>
+                <time>10:21</time>
+              </article>
+              <article class="message message--outgoing">
+                <p>Да, конечно. Сейчас посмотрю и напишу замечания.</p>
+                <time>10:22</time>
+              </article>
+              <article class="message message--incoming">
+                <p>Отлично, спасибо! И давай вечером созвонимся.</p>
+                <time>10:24</time>
+              </article>
+              <article class="message message--outgoing">
+                <p>Договорились. После 19:00 буду на связи.</p>
+                <time>10:25</time>
+              </article>
+            </div>
+
+            <form class="chat__input" id="chatForm">
+              <label for="messageInput" class="visually-hidden">Введите сообщение</label>
+              <input
+                id="messageInput"
+                name="message"
+                type="text"
+                maxlength="300"
+                placeholder="Введите сообщение..."
+                required
+              />
+              <button class="btn" type="submit">Отправить</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
