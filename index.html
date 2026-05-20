@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Alien Frontier Pixel</title>
+  <style>
+    html,body { margin:0; height:100%; background:#05070f; overflow:hidden; font-family: monospace; }
+    canvas { width:100%; height:100%; image-rendering: pixelated; image-rendering: crisp-edges; display:block; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+  addEventListener('resize', resize); resize();
+
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const keys = new Set();
+  const mouse = {x:0,y:0,down:false};
+  addEventListener('keydown', e => keys.add(e.key.toLowerCase()));
+  addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  canvas.addEventListener('mousemove', e=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+  canvas.addEventListener('mousedown', ()=> mouse.down=true);
+  canvas.addEventListener('mouseup', ()=> mouse.down=false);
+
+  let state = 'menu'; // menu, space, surface
+  let menuSelection = -1;
+  let hintText = 'Добро пожаловать на Frontier-9';
+
+  const buttons = [
+    {label:'Новая игра', action:()=>{ state='space'; hintText='Кликни по планете, чтобы спуститься'; }},
+    {label:'Продолжить', action:()=>{ hintText='Нет сохранений — начни новую игру'; }},
+    {label:'Настройки', action:()=>{ hintText='Настройки в прототипе недоступны'; }}
+  ];
+
+  const stars = Array.from({length:500},()=>({x:rand(0,1),y:rand(0,1),s:Math.floor(rand(1,4)),t:rand(0,Math.PI*2)}));
+  const planet = {x:0.6,y:0.52,r:180};
+
+  const world = {
+    width: 4800,
+    groundBase: 1050,
+    heights: [],
+    trees: [], rocks: [], ridges: []
+  };
+
+  for(let i=0;i<=world.width;i+=20){
+    const h = Math.sin(i*0.003)*80 + Math.sin(i*0.011)*30 + Math.sin(i*0.0009)*120;
+    world.heights.push({x:i,y:world.groundBase + h});
+  }
+
+  function groundY(x){
+    x = Math.max(0,Math.min(world.width,x));
+    const i = Math.floor(x/20);
+    const a = world.heights[Math.max(0,Math.min(world.heights.length-1,i))];
+    const b = world.heights[Math.max(0,Math.min(world.heights.length-1,i+1))];
+    const t = (x-a.x)/20;
+    return a.y*(1-t)+b.y*t;
+  }
+
+  for(let i=120;i<world.width;i+=rand(130,260)) world.trees.push({x:i,h:rand(90,170),w:rand(24,36)});
+  for(let i=100;i<world.width;i+=rand(80,180)) world.rocks.push({x:i,s:rand(14,34)});
+  for(let i=300;i<world.width;i+=rand(480,850)) world.ridges.push({x:i,w:rand(260,520),h:rand(120,260)});
+
+  const player = {x:260,y:0,vx:0,vy:0,w:22,h:44,dir:1,onGround:false};
+  player.y = groundY(player.x)-player.h;
+
+  const npcs = Array.from({length:8},(_,i)=>({
+    x: rand(400,world.width-400), y:0, vx:rand(-20,20), vy:0, w:22, h:44, dir:1,
+    task:'гуляет', nextSwitch:rand(1,5), name:'NPC-'+(i+1)
+  }));
+  npcs.forEach(n=> n.y = groundY(n.x)-n.h);
+  const tasks = ['принести ресурсы','помочь другим NPC','работать'];
+
+  const cam = {x:player.x,y:player.y,zoom:1.6,targetZoom:1.6,surfaceEntry:0};
+
+  function pxRect(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(Math.floor(x),Math.floor(y),Math.floor(w),Math.floor(h)); }
+
+  function drawAlien(x,y,w,h,main='#2bb052',eye='#d3ffef'){
+    pxRect(x+6,y+2,w-12,6,'#1f7f3f');
+    pxRect(x+3,y+8,w-6,10,main);
+    pxRect(x+4,y+18,w-8,11,'#249648');
+    pxRect(x+5,y+29,w-10,8,'#2fc55f');
+    pxRect(x+8,y+37,4,7,'#1b6f37');
+    pxRect(x+w-12,y+37,4,7,'#1b6f37');
+    pxRect(x+2,y+20,4,12,'#2a9f4f');
+    pxRect(x+w-6,y+20,4,12,'#2a9f4f');
+    pxRect(x+6,y+11,4,4,eye); pxRect(x+w-10,y+11,4,4,eye);
+    pxRect(x+7,y+12,2,2,'#0c1a18'); pxRect(x+w-9,y+12,2,2,'#0c1a18');
+  }
+
+  function drawBackgroundSpace(t){
+    ctx.fillStyle='#05070f'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(const s of stars){
+      const tw = (Math.sin(t*0.001+s.t)+1)*0.5;
+      const b = Math.floor(120+120*tw);
+      pxRect(s.x*canvas.width,s.y*canvas.height,s.s,s.s,`rgb(${b},${b},${b+30})`);
+    }
+  }
+
+  function drawPlanet(cx,cy,r){
+    for(let y=-r;y<=r;y+=3){
+      for(let x=-r;x<=r;x+=3){
+        const d = Math.sqrt(x*x+y*y);
+        if(d<=r){
+          const nx=x/r, ny=y/r;
+          const shade = 0.55+0.45*(1-d/r);
+          let col = [24,53,92];
+          const noise = Math.sin((x+120)*0.08)*Math.cos((y-35)*0.07) + Math.sin((x-y)*0.03);
+          if(noise>0.35) col=[31,72,43]; // continents dark green
+          if(noise>0.55) col=[24,58,34];
+          if(noise<-0.45) col=[18,44,83]; // rivers / seas dark blue
+          const atm = Math.max(0,1-Math.abs(d-r)/22);
+          const rr=Math.min(255,Math.floor(col[0]*shade + atm*20));
+          const gg=Math.min(255,Math.floor(col[1]*shade + atm*35));
+          const bb=Math.min(255,Math.floor(col[2]*shade + atm*60));
+          pxRect(cx+x,cy+y,3,3,`rgb(${rr},${gg},${bb})`);
+        }
+      }
+    }
+    for(let i=0;i<14;i++){
+      const a=i/14*Math.PI*2;
+      pxRect(cx+Math.cos(a)*r*1.02, cy+Math.sin(a)*r*1.02, 2,2, '#8cb0ff');
+    }
+  }
+
+  function worldToScreen(x,y){
+    const ox = (mouse.x/canvas.width-0.5)*80;
+    const oy = (mouse.y/canvas.height-0.5)*50;
+    return {
+      x:(x-cam.x-ox)*cam.zoom + canvas.width/2,
+      y:(y-cam.y-oy)*cam.zoom + canvas.height/2
+    };
+  }
+
+  function drawTerrain(){
+    for(const r of world.ridges){
+      const gx = worldToScreen(r.x, groundY(r.x));
+      pxRect(gx.x-r.w*0.3*cam.zoom, gx.y-r.h*cam.zoom, r.w*0.6*cam.zoom, r.h*cam.zoom, '#24363f');
+      pxRect(gx.x-r.w*0.25*cam.zoom, gx.y-r.h*0.75*cam.zoom, r.w*0.5*cam.zoom, r.h*0.75*cam.zoom, '#2f4854');
+    }
+    for(let i=0;i<world.heights.length-1;i++){
+      const a = world.heights[i], b=world.heights[i+1];
+      const sa = worldToScreen(a.x,a.y), sb = worldToScreen(b.x,b.y);
+      const minX=Math.min(sa.x,sb.x), maxX=Math.max(sa.x,sb.x);
+      for(let x=minX;x<=maxX;x+=4){
+        const t=(x-minX)/(maxX-minX+0.01);
+        const gy=sa.y*(1-t)+sb.y*t;
+        pxRect(x,gy,4,canvas.height-gy,'#142416');
+        pxRect(x,gy,4,6,'#2f6a31');
+      }
+    }
+    for(const t of world.trees){
+      const y=groundY(t.x), s=worldToScreen(t.x,y);
+      pxRect(s.x-3*cam.zoom,s.y-t.h*cam.zoom,6*cam.zoom,t.h*cam.zoom,'#3d2b1c');
+      for(let yy=0;yy< t.h*0.65;yy+=8){
+        const w=(t.w-yy*0.08)*cam.zoom;
+        pxRect(s.x-w/2,s.y-t.h*cam.zoom+yy*cam.zoom,w,8*cam.zoom, yy%16? '#2d7c34':'#3f9a45');
+      }
+    }
+    for(const r of world.rocks){
+      const y=groundY(r.x), s=worldToScreen(r.x,y);
+      pxRect(s.x-r.s*0.5*cam.zoom,s.y-r.s*0.6*cam.zoom,r.s*cam.zoom,r.s*0.6*cam.zoom,'#4f5963');
+      pxRect(s.x-r.s*0.25*cam.zoom,s.y-r.s*0.45*cam.zoom,r.s*0.3*cam.zoom,r.s*0.2*cam.zoom,'#69737d');
+    }
+  }
+
+  function updateSurface(dt){
+    const speed = 130;
+    const left = keys.has('a') || keys.has('arrowleft');
+    const right = keys.has('d') || keys.has('arrowright');
+    if(left) { player.vx=-speed; player.dir=-1; }
+    else if(right){ player.vx=speed; player.dir=1; }
+    else player.vx*=0.8;
+
+    if((keys.has(' ') || keys.has('space')) && player.onGround){
+      player.vy = -120; // low jump ~ half character
+      player.onGround=false;
+    }
+    player.vy += 330*dt;
+    player.x += player.vx*dt;
+    player.y += player.vy*dt;
+    player.x = Math.max(0,Math.min(world.width,player.x));
+    const gy = groundY(player.x)-player.h;
+    if(player.y>=gy){ player.y=gy; player.vy=0; player.onGround=true; }
+
+    npcs.forEach(n=>{
+      n.nextSwitch-=dt;
+      if(n.nextSwitch<=0){ n.vx=rand(-35,35); n.nextSwitch=rand(2,6); n.dir=n.vx>=0?1:-1; }
+      n.vy += 330*dt;
+      n.x += n.vx*dt;
+      n.x = Math.max(0,Math.min(world.width,n.x));
+      const ng=groundY(n.x)-n.h;
+      n.y += n.vy*dt;
+      if(n.y>=ng){ n.y=ng; n.vy=0; }
+      if(Math.abs(n.x-player.x)<70 && keys.has('e')){
+        n.task = tasks[Math.floor(rand(0,tasks.length))];
+        hintText = `${n.name}: ${n.task}`;
+      }
+    });
+
+    if(keys.has('+')||keys.has('=')) cam.targetZoom=Math.min(3.2,cam.targetZoom+1.4*dt);
+    if(keys.has('-')||keys.has('_')) cam.targetZoom=Math.max(0.9,cam.targetZoom-1.4*dt);
+
+    cam.x += (player.x-cam.x)*0.08;
+    cam.y += (player.y-120-cam.y)*0.08;
+    cam.zoom += (cam.targetZoom-cam.zoom)*0.08;
+  }
+
+  function drawUI(){
+    const w = Math.min(520, canvas.width-40), h=66, x=20, y=canvas.height-h-20;
+    pxRect(x,y,w,h,'#0f1624');
+    pxRect(x+4,y+4,w-8,h-8,'#1e2e42');
+    pxRect(x+8,y+8,w-16,h-16,'#0c111b');
+    ctx.fillStyle='#9fd7ff';
+    ctx.font='16px monospace';
+    ctx.fillText(hintText, x+18, y+30);
+    ctx.fillStyle='#82a6c5';
+    ctx.fillText('E — дать задание NPC | +/- — зум | WASD/Space — движение', x+18, y+52);
+  }
+
+  function drawMenu(t){
+    drawBackgroundSpace(t);
+    ctx.fillStyle='#8db2ff';
+    ctx.font='bold 46px monospace';
+    ctx.fillText('ALIEN FRONTIER', canvas.width/2-190, 120);
+    buttons.forEach((b,i)=>{
+      const bw=280,bh=54,bx=canvas.width/2-bw/2,by=220+i*84;
+      const hov = mouse.x>bx&&mouse.x<bx+bw&&mouse.y>by&&mouse.y<by+bh;
+      if(hov) menuSelection=i;
+      pxRect(bx,by,bw,bh, hov?'#3f5f9d':'#223354');
+      pxRect(bx+4,by+4,bw-8,bh-8, hov?'#1a2744':'#121d33');
+      ctx.fillStyle=hov?'#d3ecff':'#9fc4ff';
+      ctx.font='24px monospace';
+      ctx.fillText(b.label,bx+52,by+34);
+      if(mouse.down&&hov){ b.action(); mouse.down=false; }
+    });
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000); last=now;
+    if(state==='menu') drawMenu(now);
+
+    if(state==='space'){
+      drawBackgroundSpace(now);
+      drawPlanet(canvas.width*planet.x, canvas.height*planet.y, planet.r);
+      drawUI();
+      const dx=mouse.x-canvas.width*planet.x, dy=mouse.y-canvas.height*planet.y;
+      if(mouse.down && dx*dx+dy*dy<planet.r*planet.r){
+        state='surface'; mouse.down=false; hintText='Приземление успешно. Исследуй материк.';
+      }
+    }
+
+    if(state==='surface'){
+      updateSurface(dt);
+      ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      for(let i=0;i<120;i++){
+        const sx=(i*97%canvas.width), sy=(i*57%canvas.height*0.5);
+        pxRect(sx,sy,2,2,'#30495f');
+      }
+      drawTerrain();
+      const ps=worldToScreen(player.x,player.y);
+      drawAlien(ps.x-player.w*cam.zoom/2, ps.y, player.w*cam.zoom, player.h*cam.zoom, '#35c15d');
+      for(const n of npcs){
+        const ns=worldToScreen(n.x,n.y);
+        drawAlien(ns.x-n.w*cam.zoom/2,ns.y,n.w*cam.zoom,n.h*cam.zoom,'#2aa94f');
+      }
+      drawUI();
+    }
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
