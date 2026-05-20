@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExoTerraria Pixel</title>
+  <style>
+    html, body { margin:0; height:100%; background:#050510; overflow:hidden; font-family:monospace; }
+    canvas { display:block; width:100vw; height:100vh; image-rendering: pixelated; image-rendering: crisp-edges; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const STATE = { MENU:'menu', PLANET:'planet', SURFACE:'surface' };
+  let gameState = STATE.MENU;
+
+  const keys = new Set();
+  const mouse = { x:0, y:0, down:false, clicked:false };
+  const stars = [];
+  for (let i=0;i<320;i++) stars.push({x:Math.random(), y:Math.random(), s:Math.random()*2+0.5, tw:Math.random()*10});
+
+  const tileSize = 16;
+  const worldW = 260;
+  const worldH = 130;
+  const tile = { AIR:0, DIRT:1, STONE:2, WOOD:3, LEAF:4, GRASS:5 };
+  const world = Array.from({length:worldH},()=>new Uint8Array(worldW));
+
+  const player = { x:worldW/2*tileSize, y:10*tileSize, vx:0, vy:0, w:12, h:22, onGround:false, dir:1 };
+  const camera = { x:0, y:0, zoom:2.2, lookX:0, lookY:0 };
+
+  const npcs = [];
+  const tasks = ['Добыча камня', 'Сбор дерева', 'Следовать за мной', 'Патруль'];
+
+  const menuButtons = [
+    {label:'Новая игра', action:() => gameState = STATE.PLANET},
+    {label:'Продолжить', action:() => gameState = STATE.PLANET},
+    {label:'Настройки', action:() => alert('Настройки скоро появятся!')},
+  ];
+
+  const planet = {
+    x:0, y:0, r:145,
+    continents: Array.from({length:10}, ()=>({a:Math.random()*Math.PI*2, d:0.65+Math.random()*0.25, w:0.2+Math.random()*0.35})),
+    mountains: Array.from({length:16}, ()=>({a:Math.random()*Math.PI*2, h:0.08+Math.random()*0.12})),
+    rivers: Array.from({length:8}, ()=>({a:Math.random()*Math.PI*2, len:0.45+Math.random()*0.3}))
+  };
+
+  function resize(){
+    canvas.width = Math.floor(innerWidth);
+    canvas.height = Math.floor(innerHeight);
+    planet.x = canvas.width/2;
+    planet.y = canvas.height/2;
+  }
+  addEventListener('resize', resize); resize();
+
+  addEventListener('keydown', (e)=>{
+    keys.add(e.key.toLowerCase());
+    if (e.key === '+' || e.key === '=') camera.zoom = Math.min(4, camera.zoom + 0.2);
+    if (e.key === '-' || e.key === '_') camera.zoom = Math.max(1.2, camera.zoom - 0.2);
+  });
+  addEventListener('keyup', (e)=> keys.delete(e.key.toLowerCase()));
+  canvas.addEventListener('mousemove', (e)=>{
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX-r.left;
+    mouse.y = e.clientY-r.top;
+  });
+  canvas.addEventListener('mousedown', ()=>{ mouse.down = true; mouse.clicked=true;});
+  addEventListener('mouseup', ()=> mouse.down = false);
+
+  function generateWorld(){
+    const heights = new Int16Array(worldW);
+    for(let x=0;x<worldW;x++){
+      const base = 54 + Math.sin(x*0.07)*5 + Math.sin(x*0.021+1.4)*10 + Math.sin(x*0.19)*2;
+      heights[x] = Math.floor(base);
+    }
+    for(let x=0;x<worldW;x++){
+      for(let y=0;y<worldH;y++){
+        if(y < heights[x]) world[y][x]=tile.AIR;
+        else if(y===heights[x]) world[y][x]=tile.GRASS;
+        else if(y<heights[x]+5) world[y][x]=tile.DIRT;
+        else world[y][x]=tile.STONE;
+      }
+    }
+    for(let i=0;i<34;i++) carveCave(Math.floor(Math.random()*worldW), Math.floor(heights[Math.floor(Math.random()*worldW)]+8));
+    for(let x=5;x<worldW-5;x++) if(Math.random()<0.06) placeTree(x, heights[x]);
+    player.x = (worldW/2)*tileSize; player.y = (heights[Math.floor(worldW/2)]-5)*tileSize;
+
+    npcs.length = 0;
+    for(let i=0;i<6;i++){
+      const nx = 30 + Math.floor(Math.random()*(worldW-60));
+      npcs.push({x:nx*tileSize, y:(heights[nx]-4)*tileSize, vx:(Math.random()<0.5?-1:1)*35, vy:0, dir:1, task:'Бродит', cmdCooldown:0});
+    }
+  }
+
+  function carveCave(cx, cy){
+    let x=cx,y=cy, r=2+Math.random()*5;
+    for(let i=0;i<120;i++){
+      for(let yy=Math.floor(y-r); yy<=Math.floor(y+r); yy++){
+        for(let xx=Math.floor(x-r); xx<=Math.floor(x+r); xx++){
+          if(xx>1&&yy>1&&xx<worldW-2&&yy<worldH-2 && (xx-x)**2 + (yy-y)**2 <= r*r) world[yy][xx]=tile.AIR;
+        }
+      }
+      x += (Math.random()-0.5)*4;
+      y += (Math.random()-0.2)*2;
+      r = Math.max(1.8, Math.min(6, r + (Math.random()-0.5)));
+    }
+  }
+
+  function placeTree(x, groundY){
+    const h = 4 + Math.floor(Math.random()*5);
+    for(let i=1;i<=h;i++) if(groundY-i>0) world[groundY-i][x]=tile.WOOD;
+    for(let yy=-3;yy<=1;yy++) for(let xx=-2;xx<=2;xx++){
+      const tx=x+xx, ty=groundY-h+yy;
+      if(tx>1&&ty>1&&tx<worldW-1&&ty<worldH-1&&Math.abs(xx)+Math.abs(yy)<5&&Math.random()>0.15) world[ty][tx]=tile.LEAF;
+    }
+  }
+
+  function solidAt(px,py){
+    const tx=Math.floor(px/tileSize), ty=Math.floor(py/tileSize);
+    if(tx<0||ty<0||tx>=worldW||ty>=worldH) return true;
+    return world[ty][tx]!==tile.AIR;
+  }
+
+  function moveEntity(ent, dt){
+    ent.vy += 520*dt;
+    ent.x += ent.vx*dt;
+    if (collide(ent)) {
+      ent.x -= ent.vx*dt;
+      ent.vx = 0;
+    }
+    ent.y += ent.vy*dt;
+    ent.onGround = false;
+    if (collide(ent)) {
+      ent.y -= ent.vy*dt;
+      if (ent.vy > 0) ent.onGround = true;
+      ent.vy = 0;
+    }
+  }
+
+  function collide(ent){
+    const left=ent.x-ent.w/2, right=ent.x+ent.w/2, top=ent.y-ent.h, bottom=ent.y;
+    return solidAt(left,top)||solidAt(right,top)||solidAt(left,bottom)||solidAt(right,bottom);
+  }
+
+  function update(dt){
+    if(gameState===STATE.SURFACE){
+      const speed = 140;
+      if(keys.has('a')||keys.has('arrowleft')) {player.vx=-speed; player.dir=-1;}
+      else if(keys.has('d')||keys.has('arrowright')) {player.vx=speed; player.dir=1;}
+      else player.vx*=0.75;
+      if((keys.has(' ')||keys.has('w')||keys.has('arrowup')) && player.onGround) player.vy=-260;
+      moveEntity(player, dt);
+
+      // mouse look offset
+      const dx = mouse.x - canvas.width/2;
+      const dy = mouse.y - canvas.height/2;
+      const maxLook = 120;
+      const len = Math.hypot(dx,dy) || 1;
+      camera.lookX = (dx/len) * Math.min(maxLook, len*0.55);
+      camera.lookY = (dy/len) * Math.min(maxLook, len*0.55);
+
+      camera.x += ((player.x + camera.lookX) - camera.x) * 0.12;
+      camera.y += ((player.y - 80 + camera.lookY) - camera.y) * 0.12;
+
+      for(const n of npcs){
+        n.cmdCooldown -= dt;
+        if (Math.random()<0.01) n.vx = (Math.random()<0.5?-1:1) * (20 + Math.random()*35);
+        if (Math.random()<0.002 && n.onGround) n.vy = -220;
+        if (n.task==='Следовать') {
+          const dd = player.x - n.x;
+          n.vx = Math.sign(dd) * 70;
+          if (Math.abs(dd)<30) n.vx = 0;
+          n.dir = n.vx>=0?1:-1;
+        }
+        moveEntity(n,dt);
+      }
+
+      if(mouse.clicked){
+        const wx = (mouse.x-canvas.width/2)/camera.zoom + camera.x;
+        const wy = (mouse.y-canvas.height/2)/camera.zoom + camera.y;
+        for(const n of npcs){
+          if(Math.abs(wx-n.x)<14 && Math.abs(wy-(n.y-12))<18 && n.cmdCooldown<=0){
+            const i = Math.floor(Math.random()*tasks.length);
+            n.task = tasks[i];
+            if (n.task==='Следовать за мной') n.task='Следовать';
+            n.cmdCooldown = 0.5;
+          }
+        }
+      }
+    }
+
+    if(gameState===STATE.PLANET && mouse.clicked){
+      const dx=mouse.x-planet.x, dy=mouse.y-planet.y;
+      if(dx*dx+dy*dy <= planet.r*planet.r){
+        generateWorld();
+        gameState = STATE.SURFACE;
+      }
+    }
+
+    mouse.clicked = false;
+  }
+
+  function drawBackground(){
+    const g = ctx.createLinearGradient(0,0,0,canvas.height);
+    g.addColorStop(0,'#080818'); g.addColorStop(1,'#13091f');
+    ctx.fillStyle=g; ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(const s of stars){
+      const tw = (Math.sin(performance.now()*0.001+s.tw)+1)*0.5;
+      const sz = Math.floor(s.s + tw*1.4);
+      ctx.fillStyle = tw>0.6?'#cfe4ff':'#8899c5';
+      ctx.fillRect((s.x*canvas.width)|0,(s.y*canvas.height)|0,sz,sz);
+    }
+  }
+
+  function drawMenu(){
+    drawBackground();
+    ctx.fillStyle='#d8ecff';
+    ctx.font='bold 44px monospace';
+    ctx.textAlign='center';
+    ctx.fillText('EXO-TERRARIA', canvas.width/2, 130);
+    ctx.font='16px monospace';
+    ctx.fillStyle='#95b3d7';
+    ctx.fillText('пиксельная sci-fi песочница', canvas.width/2, 160);
+
+    const bw=280,bh=52,gap=16,startY=230;
+    menuButtons.forEach((b,i)=>{
+      const x=canvas.width/2-bw/2, y=startY+i*(bh+gap);
+      const hov = mouse.x>x&&mouse.x<x+bw&&mouse.y>y&&mouse.y<y+bh;
+      ctx.fillStyle = hov ? '#315ea2' : '#213e6d';
+      ctx.fillRect(x,y,bw,bh);
+      ctx.strokeStyle='#9ec2ff'; ctx.strokeRect(x+0.5,y+0.5,bw-1,bh-1);
+      ctx.fillStyle='white'; ctx.font='20px monospace'; ctx.fillText(b.label, canvas.width/2, y+33);
+      if(hov && mouse.clicked) b.action();
+    });
+  }
+
+  function drawPlanetView(){
+    drawBackground();
+    const {x,y,r} = planet;
+    ctx.save();
+    ctx.translate(x,y);
+    const grd=ctx.createRadialGradient(-r*0.35,-r*0.4,12,0,0,r);
+    grd.addColorStop(0,'#54abff'); grd.addColorStop(1,'#1f4d7e');
+    ctx.fillStyle=grd;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+
+    for(const c of planet.continents){
+      ctx.fillStyle = '#2ebf74';
+      ctx.beginPath();
+      for(let t=0;t<22;t++){
+        const a=c.a + (t/21-0.5)*c.w;
+        const rr=r*(c.d + Math.sin(t*0.7+c.a)*0.03);
+        const px=Math.cos(a)*rr, py=Math.sin(a)*rr;
+        if(t===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    for(const rv of planet.rivers){
+      ctx.strokeStyle='#64dcff'; ctx.lineWidth=2;
+      ctx.beginPath();
+      for(let i=0;i<15;i++){
+        const rr=r*(0.95 - i*0.05*rv.len);
+        const a=rv.a + Math.sin(i*0.5+rv.a)*0.15;
+        const px=Math.cos(a)*rr, py=Math.sin(a)*rr;
+        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    }
+    for(const m of planet.mountains){
+      const a=m.a, rr=r*0.86;
+      const px=Math.cos(a)*rr, py=Math.sin(a)*rr;
+      ctx.fillStyle='#7fe0aa';
+      ctx.beginPath();
+      ctx.moveTo(px,py);
+      ctx.lineTo(px+Math.cos(a+0.8)*r*m.h, py+Math.sin(a+0.8)*r*m.h);
+      ctx.lineTo(px+Math.cos(a-0.8)*r*m.h, py+Math.sin(a-0.8)*r*m.h);
+      ctx.closePath(); ctx.fill();
+    }
+
+    ctx.strokeStyle='rgba(220,240,255,.45)'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.arc(0,0,r+2,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle='#dff1ff'; ctx.font='18px monospace'; ctx.textAlign='center';
+    ctx.fillText('Кликни по экзопланете для высадки', canvas.width/2, canvas.height-70);
+  }
+
+  function drawTile(id, sx, sy){
+    if(id===tile.AIR) return;
+    const p = (c)=>{ ctx.fillStyle=c; ctx.fillRect(sx,sy,8,8); };
+    if(id===tile.GRASS){ p('#4f7b30'); ctx.fillStyle='#7dc04a'; ctx.fillRect(sx,sy,8,3); }
+    else if(id===tile.DIRT){ p('#6f4d2f'); ctx.fillStyle='#7e5b37'; ctx.fillRect(sx+2,sy+2,2,2); ctx.fillRect(sx+5,sy+5,1,1);}
+    else if(id===tile.STONE){ p('#4c556a'); ctx.fillStyle='#687187'; ctx.fillRect(sx+1,sy+1,2,2); ctx.fillRect(sx+5,sy+2,2,1); }
+    else if(id===tile.WOOD){ p('#664322'); ctx.fillStyle='#8a5b31'; ctx.fillRect(sx+3,sy,2,8); }
+    else if(id===tile.LEAF){ p('#2a9b4a'); ctx.fillStyle='#57c96d'; ctx.fillRect(sx+1,sy+1,2,2); }
+  }
+
+  function drawAlien(ent, main){
+    const x = (ent.x - camera.x)*camera.zoom + canvas.width/2;
+    const y = (ent.y - camera.y)*camera.zoom + canvas.height/2;
+    const s = camera.zoom;
+    ctx.fillStyle = main ? '#78ffcf' : '#99d8ff';
+    ctx.fillRect((x-5*s)|0,(y-20*s)|0,10*s,12*s);
+    ctx.fillStyle = main ? '#4be0a9' : '#77bee8';
+    ctx.fillRect((x-4*s)|0,(y-28*s)|0,8*s,9*s);
+    ctx.fillStyle='white';
+    ctx.fillRect((x-3*s)|0,(y-24*s)|0,2*s,2*s);
+    ctx.fillRect((x+1*s)|0,(y-24*s)|0,2*s,2*s);
+    ctx.fillStyle='#10121e';
+    ctx.fillRect((x-2*s)|0,(y-24*s)|0,1*s,1*s);
+    ctx.fillRect((x+1*s)|0,(y-24*s)|0,1*s,1*s);
+    ctx.fillStyle='#23344f';
+    ctx.fillRect((x-4*s)|0,(y-8*s)|0,3*s,8*s);
+    ctx.fillRect((x+1*s)|0,(y-8*s)|0,3*s,8*s);
+  }
+
+  function drawSurface(){
+    drawBackground();
+    ctx.save();
+    const viewW = canvas.width/camera.zoom;
+    const viewH = canvas.height/camera.zoom;
+    const sx = Math.max(0, Math.floor((camera.x-viewW/2)/tileSize)-2);
+    const ex = Math.min(worldW-1, Math.ceil((camera.x+viewW/2)/tileSize)+2);
+    const sy = Math.max(0, Math.floor((camera.y-viewH/2)/tileSize)-2);
+    const ey = Math.min(worldH-1, Math.ceil((camera.y+viewH/2)/tileSize)+2);
+
+    for(let y=sy;y<=ey;y++) for(let x=sx;x<=ex;x++){
+      const px = ((x*tileSize - camera.x)*camera.zoom + canvas.width/2)|0;
+      const py = ((y*tileSize - camera.y)*camera.zoom + canvas.height/2)|0;
+      ctx.save();
+      ctx.translate(px,py); ctx.scale(camera.zoom/2,camera.zoom/2);
+      drawTile(world[y][x],0,0);
+      ctx.restore();
+    }
+
+    for(const n of npcs){
+      drawAlien(n,false);
+      const nx=(n.x-camera.x)*camera.zoom+canvas.width/2;
+      const ny=(n.y-camera.y)*camera.zoom+canvas.height/2;
+      ctx.fillStyle='#d0e6ff'; ctx.font='12px monospace'; ctx.fillText(n.task, nx-24, ny-30);
+    }
+    drawAlien(player,true);
+    ctx.restore();
+
+    ctx.fillStyle='rgba(3,10,26,0.6)'; ctx.fillRect(12,12,370,84);
+    ctx.strokeStyle='#7ba5d8'; ctx.strokeRect(12,12,370,84);
+    ctx.fillStyle='white'; ctx.font='14px monospace';
+    ctx.fillText('A/D или ←/→: ходить | Space: прыжок | +/-: zoom', 20, 36);
+    ctx.fillText('Мышь: осмотр и клик по NPC для команд', 20, 56);
+    ctx.fillText('Главный герой: 1 инопланетянин с большими глазами', 20, 76);
+  }
+
+  let last=performance.now();
+  function loop(t){
+    const dt=Math.min(0.033,(t-last)/1000); last=t;
+    update(dt);
+    if(gameState===STATE.MENU) drawMenu();
+    else if(gameState===STATE.PLANET) drawPlanetView();
+    else drawSurface();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
