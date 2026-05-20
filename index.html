@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>НевКонтакте</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span>НВ</span>
+          </div>
+          <div class="brand-name">НевКонтакте</div>
+        </div>
+
+        <label class="search-wrap" aria-label="Поиск">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="search" placeholder="Поиск по НевКонтакте" />
+        </label>
+
+        <div class="header-actions">
+          <button class="icon-btn" title="Чаты" aria-label="Чаты">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 14a4 4 0 0 1-4 4H8l-5 3V6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" title="Звонки" aria-label="Звонки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.8 19.8 0 0 1 3.1 5.18 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.62a2 2 0 0 1-.45 2.11L9.1 10.64a16 16 0 0 0 4.26 4.26l1.2-1.17a2 2 0 0 1 2.11-.45c.84.29 1.72.5 2.62.62A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" title="Уведомления" aria-label="Уведомления">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </button>
+          <button class="avatar-btn" aria-label="Профиль пользователя">
+            <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&q=80" alt="Аватар пользователя" />
+          </button>
+        </div>
+      </header>
+
+      <div class="app-layout">
+        <aside class="sidebar">
+          <nav class="nav-list">
+            <button class="nav-item active" data-view="profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21a8 8 0 1 0-16 0"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span>Моя страница</span>
+            </button>
+            <button class="nav-item" data-view="chats">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+              </svg>
+              <span>Чаты</span>
+            </button>
+            <button class="nav-item" data-view="channels">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 12a8 8 0 0 1 8-8"></path>
+                <path d="M2 8a12 12 0 0 1 12-6"></path>
+                <path d="M6 16a4 4 0 0 1 4-4"></path>
+                <circle cx="7" cy="17" r="2"></circle>
+              </svg>
+              <span>Каналы</span>
+            </button>
+            <button class="nav-item" data-view="contacts">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+                <path d="M4 14H2"></path>
+                <path d="M22 14h-2"></path>
+              </svg>
+              <span>Контакты</span>
+            </button>
+          </nav>
+        </aside>
+
+        <main class="main-content">
+          <section class="view active" id="view-profile">
+            <div class="profile-grid">
+              <article class="card profile-card">
+                <img class="profile-avatar" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80" alt="Фото профиля" />
+                <div>
+                  <h1>Елена Мальцева</h1>
+                  <p class="muted">Product Designer · Санкт-Петербург</p>
+                </div>
+                <button class="ghost-btn">Редактировать профиль</button>
+              </article>
+
+              <article class="card about-card">
+                <div class="card-head">
+                  <h2>Обо мне</h2>
+                  <button class="icon-btn small" aria-label="Редактировать описание">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path>
+                      <path d="m16.5 3.5 4 4L7 21l-4 1 1-4Z"></path>
+                    </svg>
+                  </button>
+                </div>
+                <p>
+                  Создаю цифровые продукты, люблю чистый UI и архитектуру интерфейсов.
+                  Здесь делюсь заметками о дизайне, привычках и вдохновении.
+                </p>
+              </article>
+            </div>
+
+            <div class="posts-head">
+              <h2>Лента</h2>
+              <button class="primary-btn">+ Добавить пост</button>
+            </div>
+
+            <div class="posts-list">
+              <article class="card post-card">
+                <div class="post-meta">
+                  <strong>Елена Мальцева</strong>
+                  <time datetime="2026-04-08">8 апреля 2026</time>
+                </div>
+                <p>
+                  Сегодня закончила редизайн onboarding-потока: уменьшили шаги, сделали понятнее
+                  статус и получили +14% к завершению регистрации на тестовой группе.
+                </p>
+              </article>
+
+              <article class="card post-card">
+                <div class="post-meta">
+                  <strong>Елена Мальцева</strong>
+                  <time datetime="2026-04-05">5 апреля 2026</time>
+                </div>
+                <p>
+                  Микроанимации решают: даже короткий hover в 200ms сильно улучшает ощущение
+                  качества интерфейса.
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="view-chats">
+            <div class="chat-layout card">
+              <aside class="dialogs-list">
+                <h2>Диалоги</h2>
+                <button class="dialog-item active">
+                  <img src="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=80&q=80" alt="Алексей" />
+                  <div>
+                    <strong>Алексей</strong>
+                    <p>Встретимся в 18:30?</p>
+                  </div>
+                </button>
+                <button class="dialog-item">
+                  <img src="https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?auto=format&fit=crop&w=80&q=80" alt="Мария" />
+                  <div>
+                    <strong>Мария</strong>
+                    <p>Скинула новый макет в чат.</p>
+                  </div>
+                </button>
+              </aside>
+
+              <section class="chat-window">
+                <header class="chat-head">
+                  <strong>Алексей</strong>
+                  <span class="muted">в сети</span>
+                </header>
+                <div class="messages">
+                  <div class="bubble incoming">Привет! Как продвигается проект?</div>
+                  <div class="bubble outgoing">Отлично, почти финал. Покажу демо вечером.</div>
+                  <div class="bubble incoming">Класс, тогда до встречи!</div>
+                </div>
+                <form class="message-form">
+                  <input type="text" placeholder="Написать сообщение..." />
+                  <button type="submit" class="icon-btn send" aria-label="Отправить">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <line x1="22" y1="2" x2="11" y2="13"></line>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                  </button>
+                </form>
+              </section>
+            </div>
+          </section>
+
+          <section class="view placeholder" id="view-channels">
+            <div class="card">
+              <h2>Каналы</h2>
+              <p class="muted">Подборка тематических каналов появится здесь.</p>
+            </div>
+          </section>
+
+          <section class="view placeholder" id="view-contacts">
+            <div class="card">
+              <h2>Контакты</h2>
+              <p class="muted">Ваш список контактов и рекомендации будут отображаться в этом разделе.</p>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
