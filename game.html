@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Sci‑Fi Planet</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #04060d;
+      overflow: hidden;
+      image-rendering: pixelated;
+      font-family: "Courier New", monospace;
+    }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const state = {
+    screen: 'menu', // menu, orbit, surface
+    cameraMode: 'space',
+    stars: [],
+    keys: new Set(),
+    mouse: { x: 0, y: 0, down: false },
+    time: 0,
+    messages: [
+      'Добро пожаловать на экзопланету. Нажмите "Новая игра".',
+    ],
+    menuButtons: [
+      { text: 'Новая игра', action: () => startNewGame() },
+      { text: 'Продолжить', action: () => addMessage('Сохранений пока нет. Начните новую игру.') },
+      { text: 'Настройки', action: () => addMessage('Настройки будут доступны в следующих обновлениях.') },
+    ],
+    planet: { x: 0, y: 0, radius: 130 },
+    transition: { zoom: 1, targetZoom: 1, active: false, t: 0 },
+    world: {
+      width: 420,
+      height: 320,
+      tile: 16,
+      heightMap: [],
+      riverMap: [],
+      treeMap: [],
+      mountainMap: [],
+    },
+    camera: { x: 180, y: 130, zoom: 2.2, targetZoom: 2.2 },
+    player: {
+      x: 200,
+      y: 160,
+      vx: 0,
+      vy: 0,
+      speed: 52,
+      jumping: false,
+      jumpTime: 0,
+      facing: 1,
+      walkCycle: 0,
+      heightPx: 34,
+      jumpStrength: 180,
+    },
+    npcs: [],
+  };
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  function addMessage(text) {
+    state.messages.push(text);
+    if (state.messages.length > 6) state.messages.shift();
+  }
+
+  function hash2d(x, y) {
+    const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  }
+
+  function smoothNoise(x, y, scale) {
+    const sx = x / scale;
+    const sy = y / scale;
+    const x0 = Math.floor(sx);
+    const y0 = Math.floor(sy);
+    const xf = sx - x0;
+    const yf = sy - y0;
+
+    const n00 = hash2d(x0, y0);
+    const n10 = hash2d(x0 + 1, y0);
+    const n01 = hash2d(x0, y0 + 1);
+    const n11 = hash2d(x0 + 1, y0 + 1);
+
+    const u = xf * xf * (3 - 2 * xf);
+    const v = yf * yf * (3 - 2 * yf);
+    const nx0 = n00 + (n10 - n00) * u;
+    const nx1 = n01 + (n11 - n01) * u;
+    return nx0 + (nx1 - nx0) * v;
+  }
+
+  function fractalNoise(x, y) {
+    let val = 0;
+    let amp = 1;
+    let freq = 1;
+    let maxAmp = 0;
+    for (let i = 0; i < 4; i++) {
+      val += smoothNoise(x * freq, y * freq, 70 / freq) * amp;
+      maxAmp += amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return val / maxAmp;
+  }
+
+  function generateWorld() {
+    const w = state.world.width;
+    const h = state.world.height;
+    state.world.heightMap = new Array(w * h);
+    state.world.riverMap = new Array(w * h).fill(0);
+    state.world.treeMap = new Array(w * h).fill(0);
+    state.world.mountainMap = new Array(w * h).fill(0);
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const nx = x / w - 0.5;
+        const ny = y / h - 0.5;
+        const radial = Math.sqrt(nx * nx + ny * ny);
+        const base = fractalNoise(x, y);
+        const shaped = base - radial * 0.45;
+        state.world.heightMap[i] = shaped;
+      }
+    }
+
+    for (let y = 8; y < h - 8; y++) {
+      for (let x = 8; x < w - 8; x++) {
+        const i = y * w + x;
+        const v = state.world.heightMap[i];
+        if (v > 0.13 && v < 0.24 && smoothNoise(x + 100, y - 90, 22) > 0.62) {
+          state.world.riverMap[i] = 1;
+        }
+        if (v > 0.24 && v < 0.58 && smoothNoise(x - 230, y + 70, 19) > 0.7 && !state.world.riverMap[i]) {
+          state.world.treeMap[i] = 1;
+        }
+        if (v > 0.56 && smoothNoise(x + 30, y + 300, 25) > 0.64) {
+          state.world.mountainMap[i] = 1;
+        }
+      }
+    }
+  }
+
+  function generateStars() {
+    state.stars = [];
+    for (let i = 0; i < 350; i++) {
+      state.stars.push({
+        x: Math.random(),
+        y: Math.random(),
+        b: Math.random() * 0.8 + 0.2,
+        s: Math.floor(Math.random() * 3) + 1,
+      });
+    }
+  }
+
+  function spawnNPCs() {
+    state.npcs = [];
+    for (let i = 0; i < 9; i++) {
+      state.npcs.push({
+        x: 110 + Math.random() * 230,
+        y: 90 + Math.random() * 170,
+        vx: (Math.random() - 0.5) * 20,
+        vy: (Math.random() - 0.5) * 20,
+        timer: Math.random() * 3,
+        role: ['Собиратель', 'Помощник', 'Исследователь'][i % 3],
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  function startNewGame() {
+    state.screen = 'orbit';
+    state.cameraMode = 'space';
+    state.transition.active = false;
+    state.transition.t = 0;
+    addMessage('Игра началась. Кликните по планете для приближения к поверхности.');
+  }
+
+  function worldColor(x, y) {
+    const { width: w, height: h } = state.world;
+    if (x < 0 || y < 0 || x >= w || y >= h) return '#05070b';
+    const i = y * w + x;
+    if (state.world.riverMap[i]) return '#0a274f';
+    if (state.world.mountainMap[i]) {
+      const shade = Math.floor((state.world.heightMap[i] - 0.56) * 220 + 80);
+      return `rgb(${20 + shade * 0.3},${35 + shade * 0.28},${26 + shade * 0.24})`;
+    }
+    const v = state.world.heightMap[i];
+    if (v < 0.12) return '#041124';
+    if (v < 0.19) return '#102a3f';
+    if (v < 0.28) return '#1a422e';
+    if (v < 0.44) return '#24563a';
+    if (v < 0.6) return '#2f6a42';
+    return '#406f4f';
+  }
+
+  function update(dt) {
+    state.time += dt;
+    state.camera.zoom += (state.camera.targetZoom - state.camera.zoom) * Math.min(1, dt * 6);
+
+    if (state.screen === 'surface') {
+      const p = state.player;
+      let ax = 0, ay = 0;
+      if (state.keys.has('a') || state.keys.has('arrowleft')) ax -= 1;
+      if (state.keys.has('d') || state.keys.has('arrowright')) ax += 1;
+      if (state.keys.has('w') || state.keys.has('arrowup')) ay -= 1;
+      if (state.keys.has('s') || state.keys.has('arrowdown')) ay += 1;
+
+      const len = Math.hypot(ax, ay) || 1;
+      ax /= len; ay /= len;
+      p.vx = ax * p.speed;
+      p.vy = ay * p.speed;
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.x = Math.max(5, Math.min(state.world.width - 5, p.x));
+      p.y = Math.max(5, Math.min(state.world.height - 5, p.y));
+
+      if (Math.abs(p.vx) + Math.abs(p.vy) > 2) {
+        p.walkCycle += dt * 10;
+        p.facing = p.vx < 0 ? -1 : (p.vx > 0 ? 1 : p.facing);
+      }
+
+      if (p.jumping) {
+        p.jumpTime += dt;
+        if (p.jumpTime > 0.58) {
+          p.jumping = false;
+          p.jumpTime = 0;
+        }
+      }
+
+      state.camera.x += ((p.x + (state.mouse.x - canvas.width / 2) / (320 * state.camera.zoom)) - state.camera.x) * Math.min(1, dt * 3.5);
+      state.camera.y += ((p.y + (state.mouse.y - canvas.height / 2) / (320 * state.camera.zoom)) - state.camera.y) * Math.min(1, dt * 3.5);
+
+      for (const npc of state.npcs) {
+        npc.timer -= dt;
+        if (npc.timer <= 0) {
+          npc.timer = 2 + Math.random() * 3;
+          const ang = Math.random() * Math.PI * 2;
+          npc.vx = Math.cos(ang) * (8 + Math.random() * 18);
+          npc.vy = Math.sin(ang) * (8 + Math.random() * 18);
+        }
+        npc.x += npc.vx * dt;
+        npc.y += npc.vy * dt;
+        npc.x = Math.max(8, Math.min(state.world.width - 8, npc.x));
+        npc.y = Math.max(8, Math.min(state.world.height - 8, npc.y));
+        npc.phase += dt * 7;
+      }
+    }
+
+    if (state.transition.active) {
+      state.transition.t += dt;
+      if (state.transition.t >= 1.2) {
+        state.transition.active = false;
+        state.screen = 'surface';
+        state.cameraMode = 'surface';
+        addMessage('Поверхность открыта. WASD/стрелки — ходьба, Space — прыжок, +/- — зум.');
+      }
+    }
+  }
+
+  function drawStars() {
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (const s of state.stars) {
+      const x = Math.floor(s.x * canvas.width);
+      const y = Math.floor(s.y * canvas.height);
+      ctx.fillStyle = `rgba(${160 + s.b * 80},${190 + s.b * 60},${255},${0.45 + s.b * 0.5})`;
+      ctx.fillRect(x, y, s.s, s.s);
+      if (s.s > 1 && s.b > 0.75) {
+        ctx.fillRect(x - 1, y, 1, 1);
+        ctx.fillRect(x + s.s, y, 1, 1);
+      }
+    }
+  }
+
+  function drawPlanet() {
+    const p = state.planet;
+    const radius = p.radius;
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        const d = Math.sqrt(x * x + y * y);
+        if (d <= radius) {
+          const nx = (x / radius) * 0.5 + 0.5;
+          const ny = (y / radius) * 0.5 + 0.5;
+          const wx = Math.floor(nx * (state.world.width - 1));
+          const wy = Math.floor(ny * (state.world.height - 1));
+          const shade = 1 - d / radius;
+          let c = worldColor(wx, wy);
+          const rgb = c.match(/\d+/g);
+          if (rgb) {
+            const r = Math.floor(Number(rgb[0]) * (0.5 + shade * 0.6));
+            const g = Math.floor(Number(rgb[1]) * (0.5 + shade * 0.6));
+            const b = Math.floor(Number(rgb[2]) * (0.6 + shade * 0.5));
+            c = `rgb(${r},${g},${b})`;
+          }
+          ctx.fillStyle = c;
+          ctx.fillRect(Math.floor(p.x + x), Math.floor(p.y + y), 1, 1);
+        }
+      }
+    }
+    ctx.strokeStyle = 'rgba(120,180,255,0.25)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius + 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawSurface() {
+    const tile = state.world.tile;
+    const cam = state.camera;
+    const z = cam.zoom;
+    const viewW = canvas.width / z;
+    const viewH = canvas.height / z;
+    const x0 = Math.floor(cam.x - viewW / 2);
+    const y0 = Math.floor(cam.y - viewH / 2);
+    const x1 = Math.ceil(cam.x + viewW / 2);
+    const y1 = Math.ceil(cam.y + viewH / 2);
+
+    ctx.save();
+    ctx.scale(z, z);
+    ctx.translate(-x0, -y0);
+
+    for (let y = y0 - 1; y <= y1 + 1; y++) {
+      for (let x = x0 - 1; x <= x1 + 1; x++) {
+        ctx.fillStyle = worldColor(x, y);
+        ctx.fillRect(x, y, 1, 1);
+        const i = y * state.world.width + x;
+        if (state.world.treeMap[i]) drawTree(x, y);
+      }
+    }
+
+    drawNPCs();
+    drawPlayer();
+    ctx.restore();
+  }
+
+  function drawTree(x, y) {
+    ctx.fillStyle = '#173d22';
+    ctx.fillRect(x, y - 1, 1, 2);
+    ctx.fillStyle = '#29653b';
+    ctx.fillRect(x - 1, y - 2, 3, 1);
+    ctx.fillRect(x, y - 3, 1, 1);
+    ctx.fillStyle = '#3a844f';
+    if ((x + y) % 2 === 0) ctx.fillRect(x + 1, y - 2, 1, 1);
+  }
+
+  function drawAlien(px, py, phase, facing, isPlayer = false) {
+    const jumpOff = state.player.jumping && isPlayer ? -Math.sin(state.player.jumpTime / 0.58 * Math.PI) * 1.3 : 0;
+    const body = isPlayer ? '#44c367' : '#38a85a';
+    const shade = isPlayer ? '#2e8b4a' : '#2a7640';
+    ctx.save();
+    ctx.translate(px, py + jumpOff);
+    ctx.scale(facing, 1);
+
+    const armSwing = Math.sin(phase) * 0.45;
+    const legSwing = Math.sin(phase + Math.PI / 2) * 0.5;
+
+    ctx.fillStyle = shade;
+    ctx.fillRect(-1, 0, 2, 5);
+    ctx.fillRect(-2, 4 + legSwing, 1, 3);
+    ctx.fillRect(1, 4 - legSwing, 1, 3);
+
+    ctx.fillStyle = body;
+    ctx.fillRect(-2, -5, 4, 6);
+    ctx.fillRect(-3, -3 + armSwing, 1, 3);
+    ctx.fillRect(2, -3 - armSwing, 1, 3);
+
+    ctx.fillStyle = '#5fe889';
+    ctx.fillRect(-1, -8, 2, 3);
+    ctx.fillStyle = '#1d5f33';
+    ctx.fillRect(-1, -9, 2, 1);
+
+    ctx.fillStyle = '#ebfffd';
+    ctx.fillRect(-1, -7, 1, 1);
+    ctx.fillRect(0, -7, 1, 1);
+    ctx.fillStyle = '#0d2237';
+    ctx.fillRect(-1, -7, 1, 1);
+    ctx.fillRect(0, -7, 1, 1);
+    ctx.restore();
+  }
+
+  function drawPlayer() {
+    const p = state.player;
+    drawAlien(p.x, p.y, p.walkCycle, p.facing, true);
+  }
+
+  function drawNPCs() {
+    for (const npc of state.npcs) {
+      drawAlien(npc.x, npc.y, npc.phase, npc.vx < 0 ? -1 : 1, false);
+    }
+  }
+
+  function drawMenu() {
+    drawStars();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    ctx.fillStyle = 'rgba(10,16,30,0.85)';
+    ctx.fillRect(cx - 180, cy - 140, 360, 290);
+    ctx.strokeStyle = '#4c84ff';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(cx - 180, cy - 140, 360, 290);
+
+    ctx.fillStyle = '#9cc7ff';
+    ctx.font = '28px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIXEL EXOPLANET', cx, cy - 90);
+
+    state.menuButtons.forEach((b, i) => {
+      const bw = 240, bh = 46;
+      const bx = cx - bw / 2;
+      const by = cy - 40 + i * 66;
+      b._box = { x: bx, y: by, w: bw, h: bh };
+      const hover = pointInRect(state.mouse.x, state.mouse.y, b._box);
+      ctx.fillStyle = hover ? '#345ebd' : '#223d79';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#9dc3ff';
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = '#e1edff';
+      ctx.font = '22px Courier New';
+      ctx.fillText(b.text, cx, by + 30);
+    });
+  }
+
+  function drawOverlay() {
+    const w = Math.min(560, canvas.width - 16);
+    const h = 108;
+    const x = 8;
+    const y = canvas.height - h - 8;
+    ctx.fillStyle = 'rgba(7,13,23,0.85)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#4d85ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = '#b8d1ff';
+    ctx.textAlign = 'left';
+    ctx.font = '15px Courier New';
+    ctx.fillText('Подсказки / Сообщения', x + 12, y + 20);
+    ctx.font = '14px Courier New';
+    const msgs = state.messages.slice(-4);
+    msgs.forEach((m, i) => ctx.fillText('- ' + m, x + 12, y + 42 + i * 16));
+  }
+
+  function pointInRect(px, py, r) {
+    return px >= r.x && py >= r.y && px <= r.x + r.w && py <= r.y + r.h;
+  }
+
+  function render() {
+    if (state.screen === 'menu') {
+      drawMenu();
+      drawOverlay();
+      return;
+    }
+
+    drawStars();
+    if (state.screen === 'orbit' || state.transition.active) {
+      state.planet.x = canvas.width / 2;
+      state.planet.y = canvas.height / 2;
+      drawPlanet();
+    }
+
+    if (state.screen === 'surface') {
+      drawSurface();
+    }
+
+    if (state.transition.active) {
+      const t = Math.min(1, state.transition.t / 1.2);
+      ctx.fillStyle = `rgba(5,10,20,${1 - t})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    drawOverlay();
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    state.mouse.x = e.clientX;
+    state.mouse.y = e.clientY;
+  });
+
+  canvas.addEventListener('click', () => {
+    if (state.screen === 'menu') {
+      for (const b of state.menuButtons) {
+        if (b._box && pointInRect(state.mouse.x, state.mouse.y, b._box)) {
+          b.action();
+          return;
+        }
+      }
+    } else if (state.screen === 'orbit') {
+      const dx = state.mouse.x - state.planet.x;
+      const dy = state.mouse.y - state.planet.y;
+      if (Math.hypot(dx, dy) <= state.planet.radius) {
+        state.transition.active = true;
+        state.transition.t = 0;
+        state.camera.x = state.world.width / 2;
+        state.camera.y = state.world.height / 2;
+      }
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    state.keys.add(e.key.toLowerCase());
+    if (e.key === ' ' && state.screen === 'surface' && !state.player.jumping) {
+      state.player.jumping = true;
+      state.player.jumpTime = 0;
+    }
+    if (state.screen === 'surface') {
+      if (e.key === '+' || e.key === '=') state.camera.targetZoom = Math.min(7, state.camera.targetZoom + 0.5);
+      if (e.key === '-' || e.key === '_') state.camera.targetZoom = Math.max(1.4, state.camera.targetZoom - 0.5);
+      if (e.key.toLowerCase() === 'e') {
+        const nearNpc = state.npcs.find(n => Math.hypot(n.x - state.player.x, n.y - state.player.y) < 12);
+        if (nearNpc) addMessage(`${nearNpc.role} получил задание: сбор редких ресурсов.`);
+      }
+    }
+  });
+  window.addEventListener('keyup', (e) => state.keys.delete(e.key.toLowerCase()));
+  window.addEventListener('resize', resize);
+
+  let prev = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - prev) / 1000);
+    prev = now;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  generateStars();
+  generateWorld();
+  spawnNPCs();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
