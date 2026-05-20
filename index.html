@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Exoplanet Terraria</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    canvas { width: 100vw; height: 100vh; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = canvas.width = innerWidth;
+  let H = canvas.height = innerHeight;
+
+  const TILE = 16;
+  const WORLD_W = 320;
+  const WORLD_H = 140;
+  const GRAVITY = 0.5;
+
+  const state = {
+    scene: 'menu', // menu, space, zoom, surface
+    stars: [],
+    planet: null,
+    world: null,
+    keys: {},
+    camera: { x: 0, y: 0, zoom: 2.2, lookX: 0, lookY: 0 },
+    player: null,
+    npcs: [],
+    mouse: { x: 0, y: 0, down: false },
+    time: 0,
+    selectedNPC: null,
+    buttons: []
+  };
+
+  const TILE_COLORS = {
+    air: '#6ec0ff',
+    dirt: '#8b5a2b',
+    stone: '#6d6d75',
+    wood: '#7f5426',
+    leaf: '#2f9b3f'
+  };
+
+  function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  addEventListener('resize', resize);
+
+  function rnd(seed) {
+    let t = seed + 0x6D2B79F5;
+    return () => {
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function noise1D(x, seed=1) {
+    const i = Math.floor(x), f = x - i;
+    const ra = rnd(i * 1013 + seed)();
+    const rb = rnd((i + 1) * 1013 + seed)();
+    const u = f * f * (3 - 2 * f);
+    return ra * (1 - u) + rb * u;
+  }
+
+  function initMenu() {
+    state.scene = 'menu';
+    state.buttons = [
+      { text: 'Новая игра', x: W/2 - 130, y: H/2 - 70, w: 260, h: 44, action: startSpace },
+      { text: 'Продолжить', x: W/2 - 130, y: H/2 - 15, w: 260, h: 44, action: () => {} },
+      { text: 'Настройки', x: W/2 - 130, y: H/2 + 40, w: 260, h: 44, action: () => {} },
+    ];
+  }
+
+  function genStars() {
+    state.stars = Array.from({ length: 350 }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      s: Math.random() < 0.8 ? 1 : 2,
+      c: ['#fff','#ffe9aa','#aaddff'][Math.floor(Math.random()*3)]
+    }));
+  }
+
+  function genPlanet() {
+    const size = 92;
+    const p = { x: W/2, y: H/2, r: size, pixels: [] };
+    for (let y = -size; y <= size; y++) {
+      for (let x = -size; x <= size; x++) {
+        const d = Math.hypot(x, y);
+        if (d > size) continue;
+        const nx = (x + size) / (size * 0.6), ny = (y + size) / (size * 0.6);
+        const n = noise1D(nx * 0.45 + ny * 0.2, 77);
+        const m = noise1D(nx * 0.9 - ny * 0.1, 9);
+        let col = '#0a2d5c';
+        if (n + m * 0.35 > 0.72) col = '#4b8f4f';
+        if (n + m * 0.35 > 0.82) col = '#9ba15a';
+        if (n + m * 0.35 > 0.9) col = '#8a8a8a';
+        if (Math.abs(Math.sin(nx * 8 + ny * 4 + m*5)) > 0.97 && col !== '#0a2d5c') col = '#2f6db0';
+        if (d > size - 2) col = '#ced5df';
+        p.pixels.push({ x, y, col });
+      }
+    }
+    state.planet = p;
+  }
+
+  function startSpace() {
+    state.scene = 'space';
+    genStars();
+    genPlanet();
+  }
+
+  function generateWorld() {
+    const tiles = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
+    const heights = [];
+    for (let x = 0; x < WORLD_W; x++) {
+      const h = 55 + Math.floor(noise1D(x*0.06, 111)*22 + noise1D(x*0.015, 77)*18);
+      heights.push(Math.max(32, Math.min(WORLD_H - 18, h)));
+    }
+    for (let x = 0; x < WORLD_W; x++) {
+      const top = heights[x];
+      for (let y = top; y < WORLD_H; y++) {
+        tiles[y][x] = (y > top + 5 || Math.random() < 0.35) ? 'stone' : 'dirt';
+      }
+    }
+    for (let x = 4; x < WORLD_W - 4; x++) {
+      if (Math.random() < 0.06) {
+        const base = heights[x] - 1;
+        const th = 4 + (Math.random() * 5 | 0);
+        for (let t = 0; t < th; t++) if (base - t >= 0) tiles[base - t][x] = 'wood';
+        const crownY = base - th;
+        for (let ly = -2; ly <= 2; ly++) {
+          for (let lx = -2; lx <= 2; lx++) {
+            if (Math.abs(lx) + Math.abs(ly) <= 3 && tiles[crownY+ly]?.[x+lx] === 'air') tiles[crownY+ly][x+lx] = 'leaf';
+          }
+        }
+      }
+    }
+    state.world = { tiles, heights };
+
+    state.player = { x: WORLD_W/2 * TILE, y: (heights[Math.floor(WORLD_W/2)] - 4) * TILE, vx: 0, vy: 0, w: 12, h: 18, onGround: false };
+    state.npcs = Array.from({ length: 6 }, (_, i) => ({
+      x: (WORLD_W/2 + i*7 - 20) * TILE,
+      y: (heights[Math.floor(WORLD_W/2 + i*7 - 20)] - 4) * TILE,
+      vx: (Math.random()*0.8+0.2)*(Math.random()<0.5?-1:1), vy: 0, w: 11, h: 16, onGround: false,
+      task: 'Гуляет'
+    }));
+    state.scene = 'surface';
+    state.camera = { x: state.player.x, y: state.player.y, zoom: 2.2, lookX: 0, lookY: 0 };
+  }
+
+  function isSolid(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= WORLD_W || ty >= WORLD_H) return true;
+    const t = state.world.tiles[ty][tx];
+    return t !== 'air' && t !== 'leaf';
+  }
+
+  function moveEntity(e) {
+    e.vy += GRAVITY;
+    e.x += e.vx;
+    let left = Math.floor((e.x - e.w/2)/TILE), right = Math.floor((e.x + e.w/2)/TILE);
+    let top = Math.floor((e.y - e.h)/TILE), bottom = Math.floor(e.y/TILE);
+    for (let y = top; y <= bottom; y++) {
+      if (e.vx > 0 && isSolid(right, y)) { e.x = right*TILE - e.w/2; e.vx = 0; break; }
+      if (e.vx < 0 && isSolid(left, y)) { e.x = (left+1)*TILE + e.w/2; e.vx = 0; break; }
+    }
+    e.y += e.vy;
+    left = Math.floor((e.x - e.w/2)/TILE); right = Math.floor((e.x + e.w/2)/TILE);
+    top = Math.floor((e.y - e.h)/TILE); bottom = Math.floor(e.y/TILE);
+    e.onGround = false;
+    for (let x = left; x <= right; x++) {
+      if (e.vy > 0 && isSolid(x, bottom)) { e.y = bottom*TILE; e.vy = 0; e.onGround = true; break; }
+      if (e.vy < 0 && isSolid(x, top)) { e.y = (top+1)*TILE + e.h; e.vy = 0; break; }
+    }
+  }
+
+  function updateSurface() {
+    const p = state.player;
+    const left = state.keys['a'] || state.keys['arrowleft'];
+    const right = state.keys['d'] || state.keys['arrowright'];
+    if (left) p.vx = Math.max(p.vx - 0.35, -2.8);
+    if (right) p.vx = Math.min(p.vx + 0.35, 2.8);
+    if (!left && !right) p.vx *= 0.8;
+    if ((state.keys[' '] || state.keys['space']) && p.onGround) p.vy = -8.7;
+    moveEntity(p);
+
+    for (const n of state.npcs) {
+      if (Math.random() < 0.01) n.vx *= -1;
+      moveEntity(n);
+      const d = Math.abs(n.x - p.x);
+      if (d < 70 && Math.abs(n.y - p.y) < 36) {
+        n.task = ['Собирает ресурсы', 'Помогает другому', 'Строит мост', 'Гуляет'][Math.floor(Math.random()*4)];
+        if (state.mouse.down) state.selectedNPC = n;
+      }
+    }
+
+    const targetLookX = ((state.mouse.x / W) - 0.5) * 180;
+    const targetLookY = ((state.mouse.y / H) - 0.5) * 120;
+    state.camera.lookX += (Math.max(-90, Math.min(90, targetLookX)) - state.camera.lookX) * 0.1;
+    state.camera.lookY += (Math.max(-70, Math.min(70, targetLookY)) - state.camera.lookY) * 0.1;
+    state.camera.x += ((p.x + state.camera.lookX) - state.camera.x) * 0.1;
+    state.camera.y += ((p.y - 120 + state.camera.lookY) - state.camera.y) * 0.1;
+  }
+
+  function drawPixelButton(b, hover) {
+    ctx.fillStyle = hover ? '#5f7ca6' : '#375070';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = '#cdd9ef';
+    ctx.fillRect(b.x+2, b.y+2, b.w-4, 4);
+    ctx.fillStyle = '#122136';
+    ctx.font = '20px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(b.text, b.x + b.w/2, b.y + 29);
+  }
+
+  function drawMenu() {
+    ctx.fillStyle = '#0e1523'; ctx.fillRect(0,0,W,H);
+    for (let i = 0; i < 200; i++) { ctx.fillStyle = i%3===0?'#223':'#1b2b44'; ctx.fillRect((i*41)%W, (i*83)%H, 2, 2); }
+    ctx.fillStyle = '#e8f0ff';
+    ctx.textAlign = 'center';
+    ctx.font = '36px monospace';
+    ctx.fillText('EXO-TERRARIA', W/2, H/2 - 130);
+    for (const b of state.buttons) {
+      const hover = state.mouse.x > b.x && state.mouse.x < b.x+b.w && state.mouse.y > b.y && state.mouse.y < b.y+b.h;
+      drawPixelButton(b, hover);
+    }
+  }
+
+  function drawSpace() {
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0,0,W,H);
+    for (const s of state.stars) { ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, s.s, s.s); }
+    const p = state.planet;
+    for (const px of p.pixels) { ctx.fillStyle = px.col; ctx.fillRect(p.x + px.x*2, p.y + px.y*2, 2, 2); }
+    ctx.fillStyle = '#dde8ff'; ctx.font = '18px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Клик по планете для высадки', W/2, H - 30);
+  }
+
+  function drawEntity(e, npc=false) {
+    const sx = (e.x - state.camera.x) * state.camera.zoom + W/2;
+    const sy = (e.y - state.camera.y) * state.camera.zoom + H/2;
+    const z = state.camera.zoom;
+    ctx.fillStyle = npc ? '#77e4a8' : '#9cff6a';
+    ctx.fillRect(sx-5*z, sy-16*z, 10*z, 14*z);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(sx-4*z, sy-14*z, 3*z, 3*z);
+    ctx.fillRect(sx+1*z, sy-14*z, 3*z, 3*z);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(sx-3*z, sy-13*z, 1*z, 1*z);
+    ctx.fillRect(sx+2*z, sy-13*z, 1*z, 1*z);
+  }
+
+  function drawSurface() {
+    ctx.fillStyle = '#7ec6ff'; ctx.fillRect(0,0,W,H);
+    const z = state.camera.zoom;
+    const tSize = TILE * z;
+    const startX = Math.max(0, Math.floor((state.camera.x - W/(2*z))/TILE)-1);
+    const endX = Math.min(WORLD_W, Math.ceil((state.camera.x + W/(2*z))/TILE)+1);
+    const startY = Math.max(0, Math.floor((state.camera.y - H/(2*z))/TILE)-1);
+    const endY = Math.min(WORLD_H, Math.ceil((state.camera.y + H/(2*z))/TILE)+1);
+
+    for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
+      const t = state.world.tiles[y][x];
+      if (t === 'air') continue;
+      const sx = (x*TILE - state.camera.x)*z + W/2;
+      const sy = (y*TILE - state.camera.y)*z + H/2;
+      ctx.fillStyle = TILE_COLORS[t] || '#f0f';
+      ctx.fillRect(Math.floor(sx), Math.floor(sy), Math.ceil(tSize), Math.ceil(tSize));
+      if (t==='dirt'||t==='stone') { ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.fillRect(sx+2*z, sy+2*z, 2*z,2*z); }
+    }
+
+    for (const n of state.npcs) drawEntity(n, true);
+    drawEntity(state.player, false);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(12,12,360,80);
+    ctx.fillStyle = '#fff'; ctx.font = '16px monospace'; ctx.textAlign='left';
+    ctx.fillText('A/D или ←/→: движение | Space: прыжок | +/-: масштаб', 20, 35);
+    ctx.fillText('Подойди к NPC и кликни: назначение задач', 20, 55);
+    if (state.selectedNPC) ctx.fillText('NPC задача: ' + state.selectedNPC.task, 20, 75);
+  }
+
+  canvas.addEventListener('mousemove', e => { state.mouse.x = e.clientX; state.mouse.y = e.clientY; });
+  canvas.addEventListener('mousedown', e => {
+    state.mouse.down = true;
+    if (state.scene === 'menu') {
+      for (const b of state.buttons) {
+        if (e.clientX>b.x&&e.clientX<b.x+b.w&&e.clientY>b.y&&e.clientY<b.y+b.h) b.action();
+      }
+    } else if (state.scene === 'space') {
+      const p = state.planet;
+      const dx = (e.clientX - p.x)/2, dy = (e.clientY - p.y)/2;
+      if (Math.hypot(dx,dy) <= p.r) { state.scene = 'zoom'; state.time = 0; }
+    }
+  });
+  addEventListener('mouseup', ()=> state.mouse.down = false);
+  addEventListener('keydown', e => {
+    state.keys[e.key.toLowerCase()] = true;
+    if (e.key === '+' || e.key === '=') state.camera.zoom = Math.min(4.5, state.camera.zoom + 0.2);
+    if (e.key === '-' || e.key === '_') state.camera.zoom = Math.max(1.0, state.camera.zoom - 0.2);
+  });
+  addEventListener('keyup', e => state.keys[e.key.toLowerCase()] = false);
+
+  function tick() {
+    requestAnimationFrame(tick);
+    if (state.scene === 'menu') drawMenu();
+    else if (state.scene === 'space') drawSpace();
+    else if (state.scene === 'zoom') {
+      drawSpace();
+      state.time++;
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(1, state.time/60)})`;
+      ctx.fillRect(0,0,W,H);
+      if (state.time > 60) generateWorld();
+    } else if (state.scene === 'surface') {
+      updateSurface();
+      drawSurface();
+    }
+  }
+
+  initMenu();
+  tick();
+})();
+</script>
+</body>
+</html>
