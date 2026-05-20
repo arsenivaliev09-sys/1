@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>НевКонтакте</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="logo">НевКонтакте</div>
+      <label class="search-wrap" aria-label="Поиск">
+        <input type="text" placeholder="Поиск" />
+      </label>
+      <div class="profile-mini">
+        <div class="avatar avatar-mini" aria-hidden="true">И</div>
+        <span>Иван Иванов</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <nav class="menu" aria-label="Основное меню">
+          <button class="menu-item active" data-tab="profile-tab">Моя страница</button>
+          <button class="menu-item" data-tab="chats-tab">Чаты</button>
+          <button class="menu-item" data-tab="channels-tab">Каналы</button>
+          <button class="menu-item" data-tab="contacts-tab">Контакты</button>
+        </nav>
+
+        <div class="sidebar-actions">
+          <button class="action-btn">Создать группу</button>
+          <button class="action-btn">Создать канал</button>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div id="profile-tab" class="tab-content active" role="tabpanel">
+          <article class="card profile-card">
+            <div class="avatar avatar-large">И</div>
+            <div class="profile-main">
+              <h1>Иван Иванов</h1>
+              <div class="profile-buttons">
+                <button class="secondary-btn">Изменить профиль</button>
+                <button class="secondary-btn">Редактировать описание</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card bio-card">
+            <div class="card-header-row">
+              <h2>О себе</h2>
+              <button class="link-btn">Редактировать</button>
+            </div>
+            <p>
+              Люблю вечерний Неваград, старые книги, поездки за город и тихие
+              разговоры. Работаю дизайнером интерфейсов, по выходным играю в
+              настольный теннис.
+            </p>
+          </article>
+
+          <div class="add-post-row">
+            <button class="primary-btn">+ Добавить пост</button>
+          </div>
+
+          <section class="wall">
+            <article class="card post-card">
+              <div class="post-meta">
+                <strong>Иван Иванов</strong>
+                <span>9 апреля 2026</span>
+              </div>
+              <p>
+                Добро пожаловать в НевКонтакте! Здесь будет просто, удобно и по
+                делу — как в старые добрые времена.
+              </p>
+            </article>
+
+            <article class="card post-card">
+              <div class="post-meta">
+                <strong>Иван Иванов</strong>
+                <span>6 апреля 2026</span>
+              </div>
+              <p>
+                Собрал плейлист на весну и наконец-то разобрал архив фотографий
+                2010 года. Ностальгия!
+              </p>
+            </article>
+
+            <article class="card post-card">
+              <div class="post-meta">
+                <strong>Иван Иванов</strong>
+                <span>2 апреля 2026</span>
+              </div>
+              <p>
+                Кто хочет в субботу на прогулку вдоль набережной? Пишите в
+                чаты.
+              </p>
+            </article>
+          </section>
+        </div>
+
+        <div id="chats-tab" class="tab-content" role="tabpanel">
+          <section class="card chats-layout">
+            <aside class="dialogs-list" aria-label="Список диалогов">
+              <button class="dialog-item active" data-chat="chat-1">
+                <div class="dialog-top">
+                  <strong>Анна Петрова</strong>
+                  <span>19:45</span>
+                </div>
+                <p>Увидимся завтра у метро?</p>
+              </button>
+
+              <button class="dialog-item" data-chat="chat-2">
+                <div class="dialog-top">
+                  <strong>Рабочий чат</strong>
+                  <span>18:12</span>
+                </div>
+                <p>Файл с макетами уже в общем доступе.</p>
+              </button>
+
+              <button class="dialog-item" data-chat="chat-3">
+                <div class="dialog-top">
+                  <strong>Сергей Смирнов</strong>
+                  <span>Вчера</span>
+                </div>
+                <p>Спасибо за помощь!</p>
+              </button>
+            </aside>
+
+            <div class="chat-panel">
+              <div id="chat-1" class="chat-thread active">
+                <div class="message incoming">Привет! Как дела?</div>
+                <div class="message outgoing">Привет, отлично. Готовлюсь к встрече.</div>
+                <div class="message incoming">Увидимся завтра у метро?</div>
+                <div class="message outgoing">Да, в 12:00 подойдёт.</div>
+              </div>
+
+              <div id="chat-2" class="chat-thread">
+                <div class="message incoming">Коллеги, проверьте новый баннер.</div>
+                <div class="message outgoing">Смотрю, сейчас дам комментарии.</div>
+                <div class="message incoming">Файл с макетами уже в общем доступе.</div>
+              </div>
+
+              <div id="chat-3" class="chat-thread">
+                <div class="message incoming">Отправил документы на почту.</div>
+                <div class="message outgoing">Получил, благодарю!</div>
+                <div class="message incoming">Спасибо за помощь!</div>
+              </div>
+
+              <form class="chat-input-row" action="#" onsubmit="return false;">
+                <input id="messageInput" type="text" placeholder="Введите сообщение..." />
+                <button id="sendBtn" class="primary-btn" type="button">Отправить</button>
+              </form>
+            </div>
+          </section>
+        </div>
+
+        <div id="channels-tab" class="tab-content" role="tabpanel">
+          <section class="card channels-list">
+            <h2>Каналы</h2>
+            <ul>
+              <li>
+                <strong>Новости Неваграда</strong>
+                <span>Обновлено 1 час назад</span>
+              </li>
+              <li>
+                <strong>Кино по пятницам</strong>
+                <span>Новый пост: «Подборка фильмов 2010-х»</span>
+              </li>
+              <li>
+                <strong>Музыка дворов</strong>
+                <span>Обновлено вчера</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <div id="contacts-tab" class="tab-content" role="tabpanel">
+          <section class="card contacts-list">
+            <h2>Контакты</h2>
+            <ul>
+              <li>
+                <div class="avatar avatar-mini">А</div>
+                <span>Анна Петрова</span>
+              </li>
+              <li>
+                <div class="avatar avatar-mini">С</div>
+                <span>Сергей Смирнов</span>
+              </li>
+              <li>
+                <div class="avatar avatar-mini">О</div>
+                <span>Ольга Миронова</span>
+              </li>
+              <li>
+                <div class="avatar avatar-mini">Д</div>
+                <span>Дмитрий Крылов</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
