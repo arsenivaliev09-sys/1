@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exoplanet Pixel Strategy Prototype</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070d;
+      image-rendering: pixelated;
+      font-family: "Courier New", monospace;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: crosshair;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const off = document.createElement('canvas');
+  const offCtx = off.getContext('2d', { alpha: false });
+
+  let W = 0, H = 0;
+  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const keys = new Set();
+  let mouse = {x:0,y:0,down:false};
+
+  const state = {
+    scene: 'menu', // menu, space, zoomToSurface, surface
+    time: 0,
+    menuIndex: 0,
+    transition: 0,
+    camera: {x:0,y:0,zoom:1},
+    player: {x:1400,y:1200,speed:130,dir:0,anim:0},
+    npcs: [],
+    hint: '',
+    hintTimer: 0,
+    surfaceSeed: 912734,
+    riverPhase: 0
+  };
+
+  const buttons = [
+    {label:'НАЧАТЬ ИГРУ', action: () => enterSpace()},
+    {label:'ПРОДОЛЖИТЬ', action: () => flashHint('Сохранения пока не реализованы.')},
+    {label:'НАСТРОЙКИ', action: () => flashHint('Раздел настроек: заглушка.')}
+  ];
+
+  function rand(seed) {
+    let x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  }
+  function noise2d(x,y,s=1) {
+    const xi=Math.floor(x), yi=Math.floor(y);
+    const xf=x-xi, yf=y-yi;
+    const r=(i,j)=>rand((i*374761393 + j*668265263 + s*2147483647)>>>0);
+    const a=r(xi,yi), b=r(xi+1,yi), c=r(xi,yi+1), d=r(xi+1,yi+1);
+    const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+    return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+  }
+
+  let stars = [];
+  let planetTex, planetDetailTex, surfaceTex;
+  const planet = {x:0,y:0,r:180};
+  const world = {w:2800,h:2400, tile:4};
+
+  function resize() {
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    off.width = W;
+    off.height = H;
+    planet.x = W/2;
+    planet.y = H/2;
+  }
+
+  function generateStars() {
+    stars = [];
+    const count = Math.floor((W*H)/950);
+    for (let i=0;i<count;i++) {
+      stars.push({
+        x: Math.floor(Math.random()*W),
+        y: Math.floor(Math.random()*H),
+        b: 0.25 + Math.random()*0.75,
+        s: Math.random() < 0.05 ? 2 : 1,
+        t: Math.random()*Math.PI*2
+      });
+    }
+  }
+
+  function createPlanetTexture(size=1024) {
+    const c=document.createElement('canvas'); c.width=c.height=size;
+    const g=c.getContext('2d');
+    g.fillStyle='#000'; g.fillRect(0,0,size,size);
+    const cx=size/2, cy=size/2, r=size*0.46;
+
+    for(let y=0;y<size;y++) {
+      for(let x=0;x<size;x++) {
+        const dx=x-cx, dy=y-cy;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist>r) continue;
+        const nx=dx/r, ny=dy/r;
+        const sphereShade=Math.max(0,Math.sqrt(1-nx*nx-ny*ny));
+        const n1=noise2d(x*0.012,y*0.012,11);
+        const n2=noise2d(x*0.03,y*0.03,19)*0.5;
+        const n3=noise2d(x*0.08,y*0.08,23)*0.25;
+        const elev=n1*0.62+n2+n3-0.49;
+
+        let col;
+        if(elev < -0.05){
+          const deep=Math.floor(35+85*(elev+0.2));
+          col=[14, 26+deep*0.5, 55+deep];
+        } else if(elev < 0.03){
+          col=[36,56,74];
+        } else if(elev < 0.17){
+          col=[42,74,52];
+        } else if(elev < 0.28){
+          col=[70,84,65];
+        } else {
+          col=[98,98,95];
+        }
+
+        const lat=Math.abs(ny);
+        if(lat>0.78 && elev>0.02){ col=[110,114,116]; }
+
+        const ridge=Math.abs(noise2d(x*0.18,y*0.18,77)-0.5);
+        if(elev>0.12 && ridge<0.06){ col=[120,116,110]; }
+
+        const light=(0.52 + sphereShade*0.58 - nx*0.16);
+        const rr=Math.max(0,Math.min(255,Math.floor(col[0]*light)));
+        const gg=Math.max(0,Math.min(255,Math.floor(col[1]*light)));
+        const bb=Math.max(0,Math.min(255,Math.floor(col[2]*light)));
+        g.fillStyle=`rgb(${rr},${gg},${bb})`;
+        g.fillRect(x,y,1,1);
+
+        if(elev>0.02 && elev<0.06 && noise2d(x*0.2,y*0.2,88)>0.74){
+          g.fillStyle='rgba(24,42,78,0.6)'; g.fillRect(x,y,1,1);
+        }
+      }
+    }
+    return c;
+  }
+
+  function createSurfaceTexture(w=2800,h=2400) {
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const g=c.getContext('2d');
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const n=noise2d(x*0.015,y*0.015,101);
+        const n2=noise2d(x*0.06,y*0.06,102);
+        const m=n*0.7+n2*0.3;
+        let col;
+        if(m<0.28) col=[30,43,34];
+        else if(m<0.45) col=[41,58,43];
+        else if(m<0.62) col=[54,67,48];
+        else if(m<0.8) col=[74,72,59];
+        else col=[82,78,67];
+        if(noise2d(x*0.2,y*0.2,103)>0.82){ col=col.map(v=>v+12); }
+        g.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;
+        g.fillRect(x,y,1,1);
+      }
+    }
+
+    // rivers
+    g.fillStyle='rgba(32,62,110,0.9)';
+    for(let r=0;r<10;r++){
+      let x=Math.random()*w;
+      for(let y=0;y<h;y+=2){
+        x += (noise2d(x*0.02,y*0.01,200+r)-0.5)*10;
+        const rw=2+Math.floor(noise2d(x*0.03,y*0.03,260+r)*4);
+        g.fillRect(x-rw,y,rw*2,2);
+      }
+    }
+
+    // forest clusters
+    for(let i=0;i<700;i++){
+      const cx=Math.random()*w, cy=Math.random()*h;
+      const rad=8+Math.random()*18;
+      for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
+        if(x*x+y*y>rad*rad) continue;
+        const px=Math.floor(cx+x), py=Math.floor(cy+y);
+        if(px<0||py<0||px>=w||py>=h) continue;
+        if(Math.random()<0.35){
+          const d=80+Math.random()*40;
+          g.fillStyle=`rgb(${20+Math.random()*18},${55+Math.random()*38},${20+Math.random()*15})`;
+          g.fillRect(px,py,1,1);
+          if(Math.random()<0.12){ g.fillStyle='rgba(10,20,10,0.5)'; g.fillRect(px,py+1,1,1); }
+        }
+      }
+    }
+
+    // rocks
+    for(let i=0;i<450;i++){
+      const x=Math.random()*w, y=Math.random()*h;
+      const rw=3+Math.floor(Math.random()*8), rh=2+Math.floor(Math.random()*6);
+      for(let yy=0;yy<rh;yy++) for(let xx=0;xx<rw;xx++){
+        const light=(1-(xx/rw)*0.35-(yy/rh)*0.2);
+        g.fillStyle=`rgb(${Math.floor(95*light)},${Math.floor(92*light)},${Math.floor(88*light)})`;
+        g.fillRect(Math.floor(x+xx),Math.floor(y+yy),1,1);
+      }
+    }
+    return c;
+  }
+
+  function spawnNPCs() {
+    state.npcs = Array.from({length:14}, (_,i)=>(
+      {x:300+Math.random()*(world.w-600), y:300+Math.random()*(world.h-600), mood:Math.random(), talk:0, id:i}
+    ));
+  }
+
+  function drawAlien(g,x,y,tint='#8bd7a5', phase=0, scale=1) {
+    const px = Math.floor(x), py=Math.floor(y);
+    const s=scale;
+    const p=(dx,dy,c)=>{g.fillStyle=c; g.fillRect(px+dx*s,py+dy*s,s,s)};
+    p(3,0,'#222'); p(4,0,'#222');
+    p(2,1,tint); p(3,1,tint); p(4,1,tint); p(5,1,tint);
+    p(1,2,tint); p(2,2,tint); p(3,2,'#10211a'); p(4,2,'#10211a'); p(5,2,tint); p(6,2,tint);
+    p(1,3,tint); p(2,3,tint); p(3,3,'#7fffd4'); p(4,3,'#7fffd4'); p(5,3,tint); p(6,3,tint);
+    p(2,4,tint); p(3,4,tint); p(4,4,tint); p(5,4,tint);
+    p(2,5,tint); p(5,5,tint);
+    const leg = Math.sin(phase)>0?1:0;
+    p(2,6+leg,'#50695d'); p(5,6+(1-leg),'#50695d');
+  }
+
+  function enterSpace(){ state.scene='space'; state.transition=0; }
+
+  function update(dt) {
+    state.time += dt;
+    state.riverPhase += dt*2;
+    if(state.hintTimer>0){ state.hintTimer-=dt; if(state.hintTimer<=0) state.hint=''; }
+
+    if(state.scene==='zoomToSurface'){
+      state.transition += dt;
+      if(state.transition>=2.2){ state.scene='surface'; state.transition=0; }
+    }
+    if(state.scene==='surface'){
+      let vx=0,vy=0;
+      if(keys.has('w')||keys.has('arrowup')) vy-=1;
+      if(keys.has('s')||keys.has('arrowdown')) vy+=1;
+      if(keys.has('a')||keys.has('arrowleft')) vx-=1;
+      if(keys.has('d')||keys.has('arrowright')) vx+=1;
+      const len=Math.hypot(vx,vy)||1;
+      if(vx||vy){
+        state.player.x += (vx/len)*state.player.speed*dt;
+        state.player.y += (vy/len)*state.player.speed*dt;
+        state.player.anim += dt*10;
+      }
+      state.player.x = Math.max(10, Math.min(world.w-16, state.player.x));
+      state.player.y = Math.max(10, Math.min(world.h-16, state.player.y));
+
+      const near = state.npcs.find(n=>Math.hypot(n.x-state.player.x,n.y-state.player.y)<28);
+      if(near){
+        near.talk = Math.min(1, near.talk + dt*2);
+        if(keys.has('e')){ flashHint('NPC '+near.id+': "Сигналы приняты. Следуем за тобой."'); keys.delete('e'); }
+      }
+      state.npcs.forEach(n=>n.talk=Math.max(0,n.talk-dt));
+    }
+  }
+
+  function drawMenu() {
+    const g=ctx;
+    g.fillStyle='#070b14'; g.fillRect(0,0,W,H);
+    drawStars(g,0.25);
+    g.fillStyle='rgba(6,12,24,0.75)'; g.fillRect(W*0.2,H*0.14,W*0.6,H*0.72);
+    pixelFrame(g,W*0.2,H*0.14,W*0.6,H*0.72,'#2e4a78');
+    g.fillStyle='#8fb5ff'; g.font='bold 34px monospace'; g.textAlign='center';
+    g.fillText('EXOPLANET: DARK FRONTIER', W/2, H*0.28);
+    g.fillStyle='#5f7ca8'; g.font='16px monospace';
+    g.fillText('Пиксельная стратегическая экспедиция', W/2, H*0.33);
+
+    const bw=280,bh=52, sx=W/2-bw/2, sy=H*0.43;
+    buttons.forEach((b,i)=>{
+      const y=sy+i*(bh+20);
+      const hot= Math.abs(mouse.x-(sx+bw/2))<bw/2 && Math.abs(mouse.y-(y+bh/2))<bh/2;
+      g.fillStyle= hot ? '#1f3658' : '#102039'; g.fillRect(sx,y,bw,bh);
+      pixelFrame(g,sx,y,bw,bh, hot ? '#78a8ff' : '#3e5f8f');
+      g.fillStyle= hot ? '#d5e6ff' : '#b4c9ef'; g.font='bold 20px monospace';
+      g.fillText(b.label, W/2, y+33);
+    });
+    drawHint(g);
+  }
+
+  function drawSpace() {
+    const g=ctx;
+    g.fillStyle='#060913'; g.fillRect(0,0,W,H);
+    drawStars(g,1);
+    const r=planet.r;
+    g.save();
+    g.beginPath(); g.arc(planet.x,planet.y,r,0,Math.PI*2); g.clip();
+    g.drawImage(planetTex, planet.x-r, planet.y-r, r*2, r*2);
+    g.restore();
+    g.strokeStyle='rgba(180,220,255,0.2)'; g.lineWidth=2; g.beginPath(); g.arc(planet.x,planet.y,r+1,0,Math.PI*2); g.stroke();
+
+    g.fillStyle='#9ab6dd'; g.font='15px monospace'; g.textAlign='center';
+    g.fillText('Клик по планете: вход в атмосферу', W/2, H-36);
+    drawHint(g);
+  }
+
+  function drawZoom() {
+    drawSpace();
+    const t=Math.min(1,state.transition/2.2);
+    const ease=t*t*(3-2*t);
+    const zr = planet.r*(1+ease*8);
+    ctx.save();
+    ctx.globalAlpha = 0.85*ease;
+    ctx.beginPath(); ctx.arc(planet.x,planet.y,zr,0,Math.PI*2); ctx.clip();
+    ctx.drawImage(surfaceTex, planet.x-zr, planet.y-zr, zr*2, zr*2);
+    ctx.restore();
+    if(ease>0.7){
+      ctx.fillStyle=`rgba(3,5,8,${(ease-0.7)/0.3})`; ctx.fillRect(0,0,W,H);
+    }
+  }
+
+  function drawSurface() {
+    const g=ctx;
+    const cam = {
+      x: state.player.x - W/2,
+      y: state.player.y - H/2
+    };
+    cam.x = Math.max(0, Math.min(world.w-W, cam.x));
+    cam.y = Math.max(0, Math.min(world.h-H, cam.y));
+
+    g.fillStyle='#0b1016'; g.fillRect(0,0,W,H);
+    g.drawImage(surfaceTex, -cam.x, -cam.y);
+
+    g.fillStyle='rgba(34,92,160,0.2)';
+    for(let i=0;i<30;i++){
+      const y=((i*83 + state.riverPhase*22)%H);
+      g.fillRect(0,y,W,1);
+    }
+
+    state.npcs.forEach(n=>{
+      drawAlien(g,n.x-cam.x,n.y-cam.y,'#d5a6ff', state.time*4+n.id);
+      if(n.talk>0){
+        g.fillStyle='rgba(25,35,55,0.9)'; g.fillRect(n.x-cam.x-30,n.y-cam.y-24,64,14);
+        g.fillStyle='#cfe2ff'; g.font='10px monospace'; g.fillText('...связь...', n.x-cam.x+2, n.y-cam.y-14);
+      }
+    });
+    drawAlien(g,state.player.x-cam.x,state.player.y-cam.y,'#8af3b3', state.player.anim);
+
+    g.fillStyle='rgba(8,12,20,0.7)'; g.fillRect(8,8,320,76);
+    pixelFrame(g,8,8,320,76,'#3f5e86');
+    g.fillStyle='#c8dbff'; g.font='12px monospace';
+    g.fillText('WASD / стрелки — движение | E — взаимодействие', 16, 30);
+    g.fillText('Прототип мира: готов к расширению (ресурсы, города, фракции)', 16, 48);
+    g.fillText('ESC — в главное меню', 16, 66);
+    drawHint(g);
+  }
+
+  function drawStars(g, intensity=1){
+    stars.forEach(s=>{
+      const tw=(Math.sin(state.time*2+s.t)+1)/2;
+      const a=s.b*(0.45+0.55*tw)*intensity;
+      g.fillStyle=`rgba(180,210,255,${a})`;
+      g.fillRect(s.x,s.y,s.s,s.s);
+    });
+  }
+
+  function pixelFrame(g,x,y,w,h,c){
+    g.fillStyle=c;
+    g.fillRect(x,y,w,2); g.fillRect(x,y+h-2,w,2);
+    g.fillRect(x,y,2,h); g.fillRect(x+w-2,y,2,h);
+    g.fillRect(x+4,y+4,w-8,1); g.fillRect(x+4,y+h-5,w-8,1);
+  }
+
+  function drawHint(g){
+    if(!state.hint) return;
+    g.fillStyle='rgba(10,16,28,0.85)'; g.fillRect(W/2-220,H-90,440,32);
+    pixelFrame(g,W/2-220,H-90,440,32,'#44658d');
+    g.fillStyle='#d4e6ff'; g.font='14px monospace'; g.textAlign='center';
+    g.fillText(state.hint,W/2,H-68);
+  }
+  function flashHint(t){ state.hint=t; state.hintTimer=2.4; }
+
+  function clickAt(x,y){
+    if(state.scene==='menu'){
+      const bw=280,bh=52, sx=W/2-bw/2, sy=H*0.43;
+      buttons.forEach((b,i)=>{
+        const yy=sy+i*(bh+20);
+        if(x>=sx&&x<=sx+bw&&y>=yy&&y<=yy+bh) b.action();
+      });
+    } else if(state.scene==='space'){
+      if(Math.hypot(x-planet.x,y-planet.y)<=planet.r){
+        state.scene='zoomToSurface'; state.transition=0;
+      }
+    }
+  }
+
+  function loop(ts){
+    if(!loop.prev) loop.prev=ts;
+    const dt=Math.min(0.033,(ts-loop.prev)/1000);
+    loop.prev=ts;
+    update(dt);
+
+    if(state.scene==='menu') drawMenu();
+    else if(state.scene==='space') drawSpace();
+    else if(state.scene==='zoomToSurface') drawZoom();
+    else if(state.scene==='surface') drawSurface();
+
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', ()=>{resize(); generateStars();});
+  window.addEventListener('keydown', e=>{
+    keys.add(e.key.toLowerCase());
+    if(e.key==='Escape') state.scene='menu';
+  });
+  window.addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
+  canvas.addEventListener('mousemove', e=>{
+    const r=canvas.getBoundingClientRect();
+    mouse.x=e.clientX-r.left; mouse.y=e.clientY-r.top;
+  });
+  canvas.addEventListener('mousedown', e=>{
+    const r=canvas.getBoundingClientRect();
+    clickAt(e.clientX-r.left,e.clientY-r.top);
+  });
+
+  resize();
+  generateStars();
+  planetTex = createPlanetTexture(1200);
+  surfaceTex = createSurfaceTexture(world.w,world.h);
+  spawnNPCs();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
