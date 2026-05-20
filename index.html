@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pixel Exoplanet Strategy</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #05070d;
+      overflow: hidden;
+      font-family: "Courier New", monospace;
+      image-rendering: pixelated;
+      color: #b6c4e0;
+    }
+    #game {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      image-rendering: pixelated;
+      background: #05070d;
+      cursor: crosshair;
+    }
+    #overlay {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    #panel {
+      pointer-events: auto;
+      display: none;
+      background: rgba(6, 10, 20, 0.92);
+      border: 2px solid #27324a;
+      padding: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: min(800px, 95vw);
+    }
+    .btn {
+      background: #10182c;
+      color: #b6c4e0;
+      border: 2px solid #2f3d5f;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      text-transform: uppercase;
+    }
+    .btn:hover { background: #16243f; }
+    .btn:active { transform: translateY(1px); }
+    #hint {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #9ba8c5;
+      background: rgba(5, 8, 16, 0.88);
+      border: 2px solid #22304c;
+      padding: 6px 10px;
+      font-size: 12px;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+      text-align: center;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hint"></div>
+  <div id="overlay">
+    <div id="panel"></div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      const panel = document.getElementById('panel');
+      const hint = document.getElementById('hint');
+
+      const state = {
+        scene: 'menu',
+        keys: Object.create(null),
+        stars: [],
+        t: 0,
+        zoomTransition: null,
+        map: null,
+        camera: { x: 0, y: 0 },
+        player: { x: 32, y: 32, speed: 3.5, size: 12 },
+        npcs: [],
+        selectedNpc: null,
+        messageTimer: 0,
+        uiMessage: 'Тёмная экзопланета ждёт приказов.',
+        worldSeed: 71137,
+      };
+
+      function resize() {
+        canvas.width = Math.max(640, window.innerWidth);
+        canvas.height = Math.max(360, window.innerHeight);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      function rand(seed) {
+        let x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+      }
+
+      function buildStars() {
+        state.stars = [];
+        const count = Math.floor((canvas.width * canvas.height) / 1800);
+        for (let i = 0; i < count; i++) {
+          state.stars.push({
+            x: Math.floor(Math.random() * canvas.width),
+            y: Math.floor(Math.random() * canvas.height),
+            b: Math.random() * 0.6 + 0.2,
+            s: Math.random() < 0.12 ? 2 : 1,
+            p: Math.random() * Math.PI * 2,
+          });
+        }
+      }
+      buildStars();
+
+      function drawStarfield(parallax = 1) {
+        ctx.fillStyle = '#04060c';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (const st of state.stars) {
+          const flicker = 0.7 + 0.3 * Math.sin(state.t * 1.7 + st.p);
+          const b = Math.min(1, st.b * flicker);
+          const col = Math.floor(120 + b * 110);
+          ctx.fillStyle = `rgb(${col},${col},${Math.floor(col + 20)})`;
+          const sx = (st.x - state.camera.x * 0.03 * parallax + canvas.width) % canvas.width;
+          const sy = (st.y - state.camera.y * 0.03 * parallax + canvas.height) % canvas.height;
+          ctx.fillRect(Math.floor(sx), Math.floor(sy), st.s, st.s);
+        }
+      }
+
+      function setHint(text) {
+        hint.textContent = text;
+      }
+
+      function showPanel(buttons) {
+        panel.innerHTML = '';
+        if (!buttons || buttons.length === 0) {
+          panel.style.display = 'none';
+          return;
+        }
+        panel.style.display = 'flex';
+        for (const b of buttons) {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.textContent = b.label;
+          btn.onclick = b.onClick;
+          panel.appendChild(btn);
+        }
+      }
+
+      function showMenu() {
+        state.scene = 'menu';
+        setHint('PIXEL EXOPLANET COMMAND\nТёмная sci-fi стратегия');
+        showPanel([
+          { label: 'Начать игру', onClick: () => startGame() },
+          { label: 'Продолжить', onClick: () => toast('Сохранения пока не подключены.') },
+          { label: 'Настройки', onClick: () => toast('Настройки в разработке.') },
+        ]);
+      }
+
+      function toast(msg) {
+        state.uiMessage = msg;
+        state.messageTimer = 2.2;
+      }
+
+      function startGame() {
+        state.scene = 'space';
+        setHint('Клик по планете: посадка\nESC: главное меню');
+        showPanel([]);
+        state.player = { x: 46 * 16, y: 42 * 16, speed: 3.5, size: 12 };
+        state.npcs = [
+          npc(50, 42), npc(48, 44), npc(44, 41), npc(52, 40)
+        ];
+      }
+
+      function npc(tx, ty) {
+        return {
+          x: tx * 16,
+          y: ty * 16,
+          size: 11,
+          order: 'stay',
+          target: { x: tx * 16, y: ty * 16 },
+          tint: Math.random() < 0.5 ? '#6f92a7' : '#7b8ea3'
+        };
+      }
+
+      function generateMap(w = 120, h = 120) {
+        const tiles = new Array(h);
+        for (let y = 0; y < h; y++) {
+          tiles[y] = new Array(w);
+          for (let x = 0; x < w; x++) {
+            const n1 = rand((x * 0.17 + 10) * (y * 0.11 + state.worldSeed));
+            const n2 = rand((x * 0.08 + 4) * (y * 0.13 + 91 + state.worldSeed));
+            const v = n1 * 0.65 + n2 * 0.35;
+            let t = 'ground';
+            if (v < 0.26) t = 'water';
+            else if (v > 0.73) t = 'rock';
+            else if (v > 0.56 && rand(x * y + 99) > 0.64) t = 'tree';
+            tiles[y][x] = t;
+          }
+        }
+        return { w, h, tiles, tileSize: 16 };
+      }
+
+      function planetToSurfaceTransition() {
+        state.zoomTransition = { p: 0, duration: 1.1 };
+        state.scene = 'zoomToSurface';
+        showPanel([]);
+      }
+
+      function enterSurface() {
+        state.map = generateMap();
+        state.scene = 'surface';
+        setHint('WASD/Стрелки: движение | ESC: меню\nПодойдите к NPC, чтобы отдать приказ');
+      }
+
+      function drawMenu() {
+        drawStarfield();
+        drawPlanet(canvas.width * 0.5, canvas.height * 0.42, 95, 0);
+        drawPixelText('PIXEL EXOPLANET COMMAND', canvas.width / 2, 100, '#c3cee8', 2);
+      }
+
+      function drawSpace() {
+        drawStarfield();
+        const cx = canvas.width * 0.5;
+        const cy = canvas.height * 0.5;
+        const r = Math.min(canvas.height, canvas.width) * 0.19;
+        drawPlanet(cx, cy, r, 0);
+      }
+
+      function drawPlanet(cx, cy, r, morph) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        ctx.fillStyle = '#2f4566';
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+        ctx.fillStyle = '#21364a';
+        for (let i = 0; i < 32; i++) {
+          const a = i * 0.63;
+          const rx = cx + Math.sin(a * 1.3 + morph) * r * 0.7 + Math.cos(a * 0.7) * r * 0.2;
+          const ry = cy + Math.cos(a * 1.1 + 1.8) * r * 0.63;
+          ctx.fillRect(Math.floor(rx), Math.floor(ry), 8, 5);
+        }
+
+        ctx.fillStyle = '#315c82';
+        for (let i = 0; i < 18; i++) {
+          const a = i * 0.76;
+          const rx = cx + Math.cos(a * 1.5 + morph * 0.8) * r * 0.6;
+          const ry = cy + Math.sin(a * 1.2 + 1.2) * r * 0.6;
+          ctx.fillRect(Math.floor(rx), Math.floor(ry), 5, 3);
+        }
+
+        ctx.restore();
+        ctx.strokeStyle = '#5d7391';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      function drawZoomToSurface(dt) {
+        const z = state.zoomTransition;
+        z.p += dt / z.duration;
+        const p = Math.min(1, z.p);
+        drawStarfield();
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const rr = 90 + p * Math.max(canvas.width, canvas.height) * 0.7;
+        drawPlanet(cx, cy, rr, p * 3.2);
+
+        ctx.fillStyle = `rgba(8,13,21,${Math.max(0, p * 1.3 - 0.3)})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (p >= 1) enterSurface();
+      }
+
+      function tileAt(px, py) {
+        const ts = state.map.tileSize;
+        const x = Math.floor(px / ts), y = Math.floor(py / ts);
+        if (x < 0 || y < 0 || x >= state.map.w || y >= state.map.h) return 'rock';
+        return state.map.tiles[y][x];
+      }
+
+      function blocked(tile) {
+        return tile === 'water' || tile === 'rock' || tile === 'tree';
+      }
+
+      function moveEntity(ent, dx, dy, dt) {
+        const step = ent.speed * 48 * dt;
+        let nx = ent.x + dx * step;
+        let ny = ent.y + dy * step;
+        if (!blocked(tileAt(nx, ent.y))) ent.x = nx;
+        if (!blocked(tileAt(ent.x, ny))) ent.y = ny;
+      }
+
+      function updateSurface(dt) {
+        let dx = 0, dy = 0;
+        if (state.keys['w'] || state.keys['arrowup']) dy -= 1;
+        if (state.keys['s'] || state.keys['arrowdown']) dy += 1;
+        if (state.keys['a'] || state.keys['arrowleft']) dx -= 1;
+        if (state.keys['d'] || state.keys['arrowright']) dx += 1;
+        if (dx || dy) {
+          const n = Math.hypot(dx, dy);
+          moveEntity(state.player, dx / n, dy / n, dt);
+        }
+
+        for (const n of state.npcs) {
+          if (n.order === 'follow') {
+            n.target.x = state.player.x + 16;
+            n.target.y = state.player.y + 12;
+          }
+          if (n.order === 'goto' || n.order === 'follow') {
+            const vx = n.target.x - n.x;
+            const vy = n.target.y - n.y;
+            const dist = Math.hypot(vx, vy);
+            if (dist > 3) {
+              const speedKeeper = n.speed || 2.3;
+              n.speed = speedKeeper;
+              moveEntity(n, vx / dist, vy / dist, dt);
+            } else if (n.order === 'goto') {
+              n.order = 'stay';
+            }
+          }
+        }
+
+        const near = state.npcs.find(n => Math.hypot(n.x - state.player.x, n.y - state.player.y) < 18);
+        state.selectedNpc = near || null;
+
+        if (near) {
+          setHint('Контакт с NPC: отдайте приказ кнопкой внизу.');
+          showPanel([
+            { label: 'Иди туда', onClick: () => {
+              near.order = 'goto';
+              near.target = { x: state.player.x + 80, y: state.player.y + 16 };
+              toast('NPC: выдвигаюсь к точке.');
+            }},
+            { label: 'Следуй за мной', onClick: () => {
+              near.order = 'follow';
+              toast('NPC: следую за вами.');
+            }},
+            { label: 'Стой на месте', onClick: () => {
+              near.order = 'stay';
+              toast('NPC: удерживаю позицию.');
+            }},
+          ]);
+        } else {
+          showPanel([]);
+          setHint('WASD/Стрелки: движение | Подойдите к NPC для взаимодействия');
+        }
+
+        state.camera.x += (state.player.x - state.camera.x) * Math.min(1, dt * 8);
+        state.camera.y += (state.player.y - state.camera.y) * Math.min(1, dt * 8);
+      }
+
+      function drawSurface() {
+        drawStarfield(0.35);
+        const map = state.map;
+        const ts = map.tileSize;
+        const camX = state.camera.x - canvas.width / 2;
+        const camY = state.camera.y - canvas.height / 2;
+
+        const sx = Math.max(0, Math.floor(camX / ts));
+        const sy = Math.max(0, Math.floor(camY / ts));
+        const ex = Math.min(map.w, sx + Math.ceil(canvas.width / ts) + 2);
+        const ey = Math.min(map.h, sy + Math.ceil(canvas.height / ts) + 2);
+
+        for (let y = sy; y < ey; y++) {
+          for (let x = sx; x < ex; x++) {
+            const t = map.tiles[y][x];
+            const px = x * ts - camX;
+            const py = y * ts - camY;
+            drawTile(t, px, py, ts);
+          }
+        }
+
+        for (const n of state.npcs) drawAlien(n.x - camX, n.y - camY, n.tint, n === state.selectedNpc);
+        drawAlien(state.player.x - camX, state.player.y - camY, '#a5c7d1', true, true);
+
+        if (state.messageTimer > 0) {
+          drawMessage(state.uiMessage);
+        }
+      }
+
+      function drawTile(type, x, y, s) {
+        if (type === 'ground') {
+          ctx.fillStyle = '#1f2e24';
+          ctx.fillRect(x, y, s, s);
+          ctx.fillStyle = '#263a2c';
+          ctx.fillRect(x + 2, y + 2, 3, 2);
+        } else if (type === 'water') {
+          ctx.fillStyle = '#15324a';
+          ctx.fillRect(x, y, s, s);
+          ctx.fillStyle = '#214966';
+          ctx.fillRect(x + 1, y + 6, 6, 2);
+        } else if (type === 'rock') {
+          ctx.fillStyle = '#32373f';
+          ctx.fillRect(x, y, s, s);
+          ctx.fillStyle = '#454c57';
+          ctx.fillRect(x + 3, y + 3, 7, 5);
+        } else if (type === 'tree') {
+          ctx.fillStyle = '#1d2e24';
+          ctx.fillRect(x, y, s, s);
+          ctx.fillStyle = '#2a4836';
+          ctx.fillRect(x + 4, y + 2, 8, 7);
+          ctx.fillStyle = '#364f3b';
+          ctx.fillRect(x + 7, y + 9, 2, 5);
+        }
+      }
+
+      function drawAlien(x, y, col, selected, player = false) {
+        const xx = Math.floor(x), yy = Math.floor(y);
+        ctx.fillStyle = selected ? '#4c6088' : '#1a2336';
+        ctx.fillRect(xx - 8, yy - 11, 16, 16);
+
+        ctx.fillStyle = col;
+        ctx.fillRect(xx - 4, yy - 8, 8, 8);
+        ctx.fillRect(xx - 5, yy - 1, 10, 5);
+
+        ctx.fillStyle = '#24354a';
+        ctx.fillRect(xx - 2, yy - 6, 2, 2);
+        ctx.fillRect(xx + 1, yy - 6, 2, 2);
+
+        ctx.fillStyle = player ? '#7ea5b4' : '#6d7f98';
+        ctx.fillRect(xx - 4, yy + 4, 3, 4);
+        ctx.fillRect(xx + 1, yy + 4, 3, 4);
+      }
+
+      function drawMessage(msg) {
+        const w = Math.min(canvas.width - 40, 520);
+        const x = (canvas.width - w) / 2;
+        const y = canvas.height - 96;
+        ctx.fillStyle = 'rgba(8,12,20,0.85)';
+        ctx.fillRect(x, y, w, 32);
+        ctx.strokeStyle = '#2b3958';
+        ctx.strokeRect(x, y, w, 32);
+        ctx.fillStyle = '#b8c4de';
+        ctx.font = '14px Courier New';
+        ctx.fillText(msg, x + 10, y + 21);
+      }
+
+      function drawPixelText(text, cx, y, col, scale = 2) {
+        ctx.fillStyle = col;
+        ctx.font = `${12 * scale}px Courier New`;
+        ctx.textAlign = 'center';
+        ctx.fillText(text, cx, y);
+        ctx.textAlign = 'start';
+      }
+
+      window.addEventListener('keydown', (e) => {
+        state.keys[e.key.toLowerCase()] = true;
+        if (e.key === 'Escape') showMenu();
+      });
+      window.addEventListener('keyup', (e) => { state.keys[e.key.toLowerCase()] = false; });
+
+      canvas.addEventListener('click', (e) => {
+        if (state.scene !== 'space') return;
+        const cx = canvas.width * 0.5;
+        const cy = canvas.height * 0.5;
+        const r = Math.min(canvas.height, canvas.width) * 0.19;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        if (dx * dx + dy * dy <= r * r) planetToSurfaceTransition();
+      });
+
+      let last = performance.now();
+      function frame(now) {
+        const dt = Math.min(0.033, (now - last) / 1000);
+        last = now;
+        state.t += dt;
+        if (state.messageTimer > 0) state.messageTimer -= dt;
+
+        if (state.scene === 'menu') drawMenu();
+        else if (state.scene === 'space') drawSpace();
+        else if (state.scene === 'zoomToSurface') drawZoomToSurface(dt);
+        else if (state.scene === 'surface') {
+          updateSurface(dt);
+          drawSurface();
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      showMenu();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
