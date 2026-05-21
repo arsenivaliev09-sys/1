@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALIEN ARMADA: EARTHFALL</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Inter,Segoe UI,Arial,sans-serif}
+    #game{position:fixed;inset:0}
+    .hud{position:fixed;inset:0;pointer-events:none;color:#c9f6ff}
+    .top{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:min(1080px,96vw);display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .panel{background:linear-gradient(135deg,rgba(6,20,35,.65),rgba(12,8,28,.45));border:1px solid rgba(85,216,255,.45);border-radius:12px;padding:10px 14px;box-shadow:0 0 22px rgba(61,214,255,.25),inset 0 0 30px rgba(73,118,255,.12);backdrop-filter:blur(4px)}
+    .label{font-size:11px;letter-spacing:2px;opacity:.8;text-transform:uppercase}
+    .value{font-size:20px;font-weight:700;text-shadow:0 0 12px rgba(72,232,255,.6)}
+    .bar{height:10px;background:rgba(0,0,0,.55);border:1px solid rgba(108,236,255,.5);border-radius:999px;overflow:hidden;margin-top:6px}
+    .fill{height:100%;width:100%;background:linear-gradient(90deg,#ff416f,#ffaa6a,#6effb6);box-shadow:0 0 16px rgba(111,255,201,.8)}
+    .bot{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;align-items:flex-end}
+    .mini{width:160px;height:160px;border-radius:14px;border:1px solid rgba(94,220,255,.45);background:radial-gradient(circle at 30% 20%,rgba(50,220,255,.15),rgba(5,9,19,.72));box-shadow:0 0 20px rgba(70,210,255,.25)}
+    #overlay{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle at center,rgba(5,22,48,.35),rgba(0,0,0,.86));z-index:5;transition:opacity .5s}
+    #card{width:min(920px,94vw);padding:28px;border:1px solid rgba(111,221,255,.45);border-radius:18px;background:linear-gradient(160deg,rgba(8,19,36,.86),rgba(11,9,28,.74));text-align:center;color:#e7fbff;box-shadow:0 0 32px rgba(77,215,255,.35),inset 0 0 60px rgba(140,68,255,.14)}
+    h1{margin:0;font-size:clamp(30px,6vw,72px);letter-spacing:3px;text-shadow:0 0 16px rgba(72,225,255,.7)}
+    p{opacity:.9;line-height:1.5}
+    button{pointer-events:auto;margin-top:12px;padding:14px 36px;font-size:20px;border-radius:12px;border:1px solid rgba(118,231,255,.7);background:linear-gradient(130deg,rgba(56,222,255,.28),rgba(153,80,255,.25));color:#fff;cursor:pointer;box-shadow:0 0 22px rgba(59,222,255,.45)}
+    .hide{opacity:0;pointer-events:none}
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud">
+  <div class="top">
+    <div class="panel"><div class="label">ЗДОРОВЬЕ</div><div class="bar"><div class="fill" id="health"></div></div></div>
+    <div class="panel"><div class="label">ЭНЕРГИЯ / ТАЙМЕР</div><div class="value" id="timer">01:00</div></div>
+    <div class="panel"><div class="label">УНИЧТОЖЕНО</div><div class="value" id="stats">Здания 0 • Истребители 0</div></div>
+  </div>
+  <div class="bot"><canvas id="mini" class="mini" width="160" height="160"></canvas><div class="panel" id="phase">CINEMATIC APPROACH</div></div>
+</div>
+<div id="overlay"><div id="card"><h1>ALIEN ARMADA</h1><p>WASD — движение • Shift — ускорение • Мышь — поворот • ЛКМ — лазер.<br>Сначала — кинематографичное приближение к Земле, затем уничтожь город за 60 секунд.</p><button id="play">PLAY</button></div></div>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+
+const canvas=document.getElementById('game');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.22;
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x070912,0.006);
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,5000);
+
+const ambient=new THREE.HemisphereLight(0x8fdfff,0x0d1020,0.9);scene.add(ambient);
+const key=new THREE.DirectionalLight(0x9ad8ff,1.1);key.position.set(20,30,10);scene.add(key);
+const rim=new THREE.PointLight(0x7d49ff,2,300);rim.position.set(-20,8,-30);scene.add(rim);
+
+const stars=new THREE.BufferGeometry();const starCnt=8000;const pos=new Float32Array(starCnt*3);
+for(let i=0;i<starCnt;i++){const r=600+Math.random()*1800,a=Math.random()*Math.PI*2,b=(Math.random()-.5)*Math.PI;pos[i*3]=Math.cos(a)*Math.cos(b)*r;pos[i*3+1]=Math.sin(b)*r*0.6;pos[i*3+2]=Math.sin(a)*Math.cos(b)*r}
+stars.setAttribute('position',new THREE.BufferAttribute(pos,3));
+scene.add(new THREE.Points(stars,new THREE.PointsMaterial({color:0xccefff,size:1.25,sizeAttenuation:true,transparent:true,opacity:.9})));
+
+const nebula=new THREE.Mesh(new THREE.SphereGeometry(1800,32,32),new THREE.MeshBasicMaterial({color:0x1e2e6b,transparent:true,opacity:.09,side:THREE.BackSide}));scene.add(nebula);
+
+function makeMothership(){
+  const g=new THREE.Group();
+  const hull=new THREE.Mesh(new THREE.CylinderGeometry(36,54,16,64,1,true),new THREE.MeshStandardMaterial({color:0x9baac4,metalness:.85,roughness:.24,emissive:0x0d162d,emissiveIntensity:.35}));hull.rotation.x=Math.PI/2;g.add(hull);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(34,2.4,20,90),new THREE.MeshStandardMaterial({color:0x4ce6ff,emissive:0x2acbff,emissiveIntensity:1.8,metalness:.3,roughness:.2}));ring.rotation.x=Math.PI/2;g.add(ring);
+  for(let i=0;i<6;i++){const e=new THREE.Mesh(new THREE.SphereGeometry(2.2,16,16),new THREE.MeshBasicMaterial({color:0x65dbff}));const a=i/6*Math.PI*2;e.position.set(Math.cos(a)*18,-2,Math.sin(a)*18);g.add(e)}
+  const engine=new THREE.PointLight(0x51f3ff,4,120);engine.position.set(0,-6,-16);g.add(engine);
+  g.scale.set(2.6,2.6,2.6);return g;
+}
+const mothership=makeMothership();scene.add(mothership);
+
+const earthGroup=new THREE.Group();scene.add(earthGroup);
+const earth=new THREE.Mesh(new THREE.SphereGeometry(32,80,80),new THREE.MeshStandardMaterial({color:0x2b65b8,roughness:.9,metalness:.02,emissive:0x081528,emissiveIntensity:.25}));
+const clouds=new THREE.Mesh(new THREE.SphereGeometry(32.7,60,60),new THREE.MeshStandardMaterial({color:0xe7f2ff,transparent:true,opacity:.2,roughness:1}));
+const atm=new THREE.Mesh(new THREE.SphereGeometry(34.4,60,60),new THREE.MeshBasicMaterial({color:0x7db8ff,transparent:true,opacity:.18,side:THREE.BackSide}));
+earthGroup.add(earth,clouds,atm);earthGroup.position.set(340,80,-800);
+
+const city=new THREE.Group();scene.add(city);city.visible=false;
+const buildings=[];const military=[];
+for(let x=-180;x<=180;x+=18){for(let z=-180;z<=180;z+=18){if(Math.random()<.25)continue;const h=8+Math.random()*55;const m=new THREE.Mesh(new THREE.BoxGeometry(12,h,12),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(.60,.22,.13+Math.random()*.12),metalness:.25,roughness:.72,emissive:0x0c2338,emissiveIntensity:.26}));m.position.set(x,h/2,z);m.userData.hp=100;m.userData.dead=false;city.add(m);buildings.push(m);if(Math.random()<.06){const t=new THREE.Mesh(new THREE.CylinderGeometry(2,2,6,10),new THREE.MeshStandardMaterial({color:0x556270,emissive:0x5f2020,emissiveIntensity:.3}));t.position.set(x,3,z);t.userData.type='turret';military.push(t);city.add(t)}}}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(1000,1000),new THREE.MeshStandardMaterial({color:0x0b111d,roughness:1,metalness:.08}));ground.rotation.x=-Math.PI/2;city.add(ground);
+
+const player=new THREE.Group();scene.add(player);player.visible=false;
+const pBody=new THREE.Mesh(new THREE.ConeGeometry(1.5,5,10),new THREE.MeshStandardMaterial({color:0xaab4d4,metalness:.7,roughness:.3,emissive:0x0f2840,emissiveIntensity:.55}));pBody.rotation.x=Math.PI/2;player.add(pBody);const pLight=new THREE.PointLight(0x63ebff,2.6,34);pLight.position.set(0,0,-3);player.add(pLight);
+
+const fighters=[];function spawnFighters(n=18){for(let i=0;i<n;i++){const f=new THREE.Mesh(new THREE.ConeGeometry(.8,2.8,8),new THREE.MeshStandardMaterial({color:0x4e5c77,emissive:0x5b6c8e,emissiveIntensity:.3}));f.rotation.x=Math.PI/2;f.position.copy(mothership.position).add(new THREE.Vector3((Math.random()-.5)*8,Math.random()*4-2,(Math.random()-.5)*8));f.userData={hp:40,t:Math.random()*99,v:new THREE.Vector3()};scene.add(f);fighters.push(f)}}
+const humanJets=[];function spawnJets(n=10){for(let i=0;i<n;i++){const j=new THREE.Mesh(new THREE.ConeGeometry(.9,3.5,8),new THREE.MeshStandardMaterial({color:0x9ea3ad,emissive:0x2a2d33,emissiveIntensity:.5}));j.rotation.x=Math.PI/2;j.position.set((Math.random()-.5)*260,30+Math.random()*70,(Math.random()-.5)*260);j.userData={hp:35,reload:Math.random()*1.8,v:new THREE.Vector3()};scene.add(j);humanJets.push(j)}}
+
+const lasers=[],missiles=[],particles=[];
+function laser(from,dir,color=0x74fffe,speed=420,team='player'){const m=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,3,8),new THREE.MeshBasicMaterial({color}));m.rotation.x=Math.PI/2;m.position.copy(from);scene.add(m);lasers.push({m,dir:dir.clone(),s:speed,life:2.4,team});}
+function boom(p,col=0xffa366,size=36){for(let i=0;i<size;i++){const b=new THREE.Mesh(new THREE.SphereGeometry(.18+Math.random()*.35,6,6),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.95}));b.position.copy(p);b.userData={v:new THREE.Vector3((Math.random()-.5)*22,(Math.random()-.1)*18,(Math.random()-.5)*22),life:.8+Math.random()*1};scene.add(b);particles.push(b)}}
+
+const keys={};addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);
+let md=false,mx=0,my=0;addEventListener('pointerdown',()=>md=true);addEventListener('pointerup',()=>md=false);addEventListener('pointermove',e=>{mx=(e.clientX/innerWidth)*2-1;my=(e.clientY/innerHeight)*2-1;});
+
+const healthEl=document.getElementById('health'),timerEl=document.getElementById('timer'),statsEl=document.getElementById('stats'),phaseEl=document.getElementById('phase');
+const mini=document.getElementById('mini'),mctx=mini.getContext('2d');
+let phase=0,phaseTime=0,gameTime=60,health=100,energy=100,destroyed=0,downed=0,shake=0;
+
+function updateMini(){mctx.clearRect(0,0,160,160);mctx.strokeStyle='rgba(85,227,255,.4)';mctx.strokeRect(8,8,144,144);mctx.fillStyle='rgba(92,234,255,.8)';for(const b of buildings){if(b.userData.dead)continue;const x=80+b.position.x*.32,y=80+b.position.z*.32;mctx.fillRect(x,y,2,2)}mctx.fillStyle='#ff6b8f';for(const j of humanJets){const x=80+j.position.x*.32,y=80+j.position.z*.32;mctx.fillRect(x,y,3,3)}mctx.fillStyle='#76ffda';const px=80+player.position.x*.32,py=80+player.position.z*.32;mctx.beginPath();mctx.arc(px,py,3,0,Math.PI*2);mctx.fill();}
+
+function start(){document.getElementById('overlay').classList.add('hide');phase=1;phaseTime=0;camera.position.set(0,25,120);mothership.position.set(0,8,0)}
+document.getElementById('play').onclick=start;
+
+const clock=new THREE.Clock();
+function tick(){requestAnimationFrame(tick);const dt=Math.min(.05,clock.getDelta());phaseTime+=dt;earth.rotation.y+=dt*.22;clouds.rotation.y+=dt*.3;
+  if(phase===0){camera.position.set(Math.sin(performance.now()*0.0002)*90,28,120+Math.cos(performance.now()*0.00015)*20);camera.lookAt(mothership.position);mothership.rotation.y+=dt*.12}
+  if(phase===1){phaseEl.textContent='APPROACHING EARTH';const t=Math.min(1,phaseTime/18);earthGroup.position.lerp(new THREE.Vector3(0,20,-220),dt*.6);camera.position.lerp(new THREE.Vector3(Math.sin(phaseTime*.35)*70,28+Math.sin(phaseTime*.4)*12,110-85*t),dt*.7);camera.lookAt(mothership.position.clone().add(new THREE.Vector3(0,8,-50)));mothership.position.z-=dt*14;mothership.rotation.y+=dt*.16;
+    if(phaseTime>20){phase=2;phaseTime=0;city.visible=true;player.visible=true;player.position.set(0,45,120);spawnFighters(26);spawnJets(13);scene.fog.density=.012;camera.position.set(0,26,90)}}
+  if(phase===2){phaseEl.textContent='CITY ANNIHILATION';gameTime-=dt;if(gameTime<=0||health<=0){phase=3;phaseEl.textContent='MISSION ENDED';}
+    const sp=(keys.ShiftLeft||keys.ShiftRight)?72:42;const dir=new THREE.Vector3();if(keys.KeyW)dir.z-=1;if(keys.KeyS)dir.z+=1;if(keys.KeyA)dir.x-=1;if(keys.KeyD)dir.x+=1;dir.normalize();
+    player.position.addScaledVector(dir,sp*dt);player.position.x=THREE.MathUtils.clamp(player.position.x,-220,220);player.position.z=THREE.MathUtils.clamp(player.position.z,-220,220);player.position.y=THREE.MathUtils.clamp(player.position.y+(-my*24-player.position.y+42)*dt*2.4,20,80);
+    player.rotation.y = THREE.MathUtils.lerp(player.rotation.y,-mx*.8,dt*6);player.rotation.z = THREE.MathUtils.lerp(player.rotation.z,-mx*.35,dt*6);
+    camera.position.lerp(new THREE.Vector3(player.position.x+Math.sin(player.rotation.y)*26,player.position.y+9,player.position.z+28),dt*5);camera.lookAt(player.position.x,player.position.y+2,player.position.z-30);
+    if(md && energy>4){energy-=28*dt;const d=new THREE.Vector3(Math.sin(player.rotation.y),-0.04,-Math.cos(player.rotation.y)).normalize();laser(player.position.clone().add(new THREE.Vector3(0,0,-2)),d,0x76fff4,520,'player');}
+    energy=Math.min(100,energy+14*dt);
+
+    for(const f of fighters){f.userData.t+=dt;const r=25+8*Math.sin(f.userData.t*.8);const a=f.userData.t*.6;const target=new THREE.Vector3(mothership.position.x+Math.cos(a)*r,mothership.position.y-8+Math.sin(f.userData.t*1.7)*2,mothership.position.z+Math.sin(a)*r);f.position.lerp(target,dt*1.7);f.lookAt(target.clone().add(new THREE.Vector3(0,0,-40)));if(Math.random()<.02)laser(f.position,new THREE.Vector3((Math.random()-.5)*.1,-.12,-1).normalize(),0x55d9ff,280,'alien')}
+
+    for(const j of humanJets){if(j.userData.hp<=0)continue;const toP=player.position.clone().sub(j.position);j.userData.v.addScaledVector(toP.normalize(),18*dt);j.userData.v.multiplyScalar(.98);j.position.addScaledVector(j.userData.v,dt);j.lookAt(player.position);j.userData.reload-=dt;if(j.userData.reload<0){j.userData.reload=1+Math.random()*1.2;const d=player.position.clone().sub(j.position).normalize();laser(j.position,d,0xff6d7f,260,'human')}}
+
+    for(let i=lasers.length-1;i>=0;i--){const l=lasers[i];l.life-=dt;l.m.position.addScaledVector(l.dir,l.s*dt);if(l.life<0){scene.remove(l.m);lasers.splice(i,1);continue}
+      if(l.team==='player'){
+        for(const b of buildings){if(b.userData.dead)continue;if(l.m.position.distanceTo(b.position)<7){b.userData.hp-=40;scene.remove(l.m);lasers.splice(i,1);boom(l.m.position,0xffa066,24);shake=.35;if(b.userData.hp<=0){b.userData.dead=true;destroyed++;city.remove(b);boom(b.position,0xff643d,70)}break}}
+        for(const j of humanJets){if(j.userData.hp<=0)continue;if(l.m.position.distanceTo(j.position)<3){j.userData.hp-=35;scene.remove(l.m);lasers.splice(i,1);boom(j.position,0x9ed7ff,20);if(j.userData.hp<=0){downed++;scene.remove(j);boom(j.position,0xff8a66,45)}break}}
+      } else if(l.team==='human'){
+        if(l.m.position.distanceTo(player.position)<3.2){health-=9+Math.random()*5;scene.remove(l.m);lasers.splice(i,1);boom(player.position,0x8cdfff,25);shake=.45;}
+      }
+    }
+
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i],u=p.userData;u.life-=dt;p.position.addScaledVector(u.v,dt);u.v.y-=14*dt;p.material.opacity=Math.max(0,u.life);if(u.life<=0){scene.remove(p);particles.splice(i,1)}}
+    shake*=.9;
+  }
+  if(phase===3){camera.position.lerp(new THREE.Vector3(player.position.x+40,player.position.y+22,player.position.z+50),dt*1.5);camera.lookAt(player.position);}
+
+  const s=1+shake*.02;camera.fov=60+s*4;camera.updateProjectionMatrix();camera.position.x += (Math.random()-.5)*shake;camera.position.y += (Math.random()-.5)*shake;
+  healthEl.style.width=Math.max(0,health)+'%';timerEl.textContent=`${String(Math.max(0,gameTime|0)/60|0).padStart(2,'0')}:${String(Math.max(0,gameTime|0)%60).padStart(2,'0')}`;statsEl.textContent=`Здания ${destroyed} • Истребители ${downed}`;
+  updateMini();renderer.render(scene,camera);
+}
+tick();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>
