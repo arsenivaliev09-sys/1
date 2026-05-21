@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Alien Armada: Earthfall</title>
+  <style>
+    :root {
+      --bg:#030711;
+      --neon:#33ddff;
+      --neon2:#b14dff;
+      --warn:#ff4d6d;
+      --ok:#7dff9b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #0a1230 0%, var(--bg) 45%, #01030a 100%);
+      font-family: "Segoe UI", "Orbitron", "Rajdhani", Arial, sans-serif;
+      color: #e8fbff;
+      touch-action: none;
+      user-select: none;
+    }
+    #gameCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hud {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(940px, calc(100vw - 24px));
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hudPanel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border: 1px solid rgba(71, 200, 255, 0.45);
+      border-radius: 14px;
+      background: linear-gradient(140deg, rgba(13, 23, 45, 0.78), rgba(7, 14, 32, 0.48));
+      backdrop-filter: blur(4px);
+      box-shadow:
+        inset 0 0 30px rgba(69, 222, 255, 0.1),
+        0 0 16px rgba(51, 221, 255, 0.25),
+        0 0 42px rgba(177, 77, 255, 0.08);
+    }
+    .metric { min-width: 160px; }
+    .label {
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.75;
+    }
+    .value {
+      margin-top: 3px;
+      font-size: clamp(16px, 2vw, 22px);
+      font-weight: 700;
+      text-shadow: 0 0 10px rgba(51,221,255,.65);
+    }
+    .healthWrap {
+      flex: 1;
+      min-width: 180px;
+      max-width: 420px;
+    }
+    .bar {
+      margin-top: 6px;
+      width: 100%;
+      height: 12px;
+      border-radius: 9px;
+      border: 1px solid rgba(92, 224, 255, 0.6);
+      background: rgba(4, 10, 20, 0.9);
+      overflow: hidden;
+      box-shadow: inset 0 0 10px rgba(0,0,0,.8), 0 0 18px rgba(51,221,255,.35);
+    }
+    .barFill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff4d6d, #ff9f68 40%, #7dff9b);
+      box-shadow: 0 0 12px rgba(125,255,155,.8);
+      transition: width .16s linear;
+    }
+    .centerScreen {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 20;
+      transition: opacity .5s ease;
+      padding: 16px;
+      background: radial-gradient(circle at center, rgba(2, 10, 25, .55), rgba(1, 3, 10, .9));
+    }
+    .panel {
+      width: min(780px, 96vw);
+      padding: clamp(20px, 4vw, 44px);
+      border-radius: 18px;
+      border: 1px solid rgba(74, 205, 255, .5);
+      background: linear-gradient(135deg, rgba(8, 18, 37, .9), rgba(5, 11, 25, .78));
+      box-shadow: 0 0 30px rgba(51,221,255,.35), inset 0 0 70px rgba(177,77,255,.12);
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 6vw, 64px);
+      line-height: 1;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #d8f9ff;
+      text-shadow: 0 0 12px rgba(51,221,255,.8), 0 0 34px rgba(177,77,255,.45);
+    }
+    p { opacity: .88; margin: 12px auto 0; max-width: 620px; line-height: 1.45; font-size: clamp(14px, 2.6vw, 18px); }
+    .playBtn {
+      margin-top: 22px;
+      pointer-events: auto;
+      border: 1px solid rgba(110,235,255,.75);
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(25, 214, 255,.25), rgba(177,77,255,.2));
+      color: #e9fbff;
+      font-size: clamp(17px, 3.5vw, 24px);
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 14px 34px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 0 18px rgba(51,221,255,.45), inset 0 0 18px rgba(51,221,255,.2);
+      transition: transform .16s ease, box-shadow .16s ease, background .2s ease;
+    }
+    .playBtn:hover,.playBtn:active { transform: translateY(-2px) scale(1.02); box-shadow: 0 0 28px rgba(51,221,255,.65), inset 0 0 26px rgba(177,77,255,.26); }
+    .hidden { opacity: 0; pointer-events: none; }
+    .tiny { font-size: 12px; opacity: .7; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div class="hud">
+  <div class="hudPanel">
+    <div class="metric"><div class="label">Уничтожено целей</div><div class="value" id="scoreValue">0</div></div>
+    <div class="healthWrap">
+      <div class="label">Здоровье материнского корабля</div>
+      <div class="bar"><div class="barFill" id="healthFill"></div></div>
+    </div>
+    <div class="metric" style="text-align:right"><div class="label">Статус</div><div class="value" id="statusValue">Ожидание</div></div>
+  </div>
+</div>
+<div class="centerScreen" id="startScreen">
+  <div class="panel">
+    <h1>Alien Armada</h1>
+    <p>Захвати орбиту, веди огромный инопланетный корабль и сожги города Земли плазменными лучами. Двигайся мышкой или пальцем, стреляй нажатием.</p>
+    <button class="playBtn" id="playBtn">Play</button>
+    <div class="tiny">ПК: движение мышью + ЛКМ / Телефон: свайп и тап.</div>
+  </div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('scoreValue');
+  const healthFill = document.getElementById('healthFill');
+  const statusEl = document.getElementById('statusValue');
+  const startScreen = document.getElementById('startScreen');
+  const playBtn = document.getElementById('playBtn');
+
+  let w=0,h=0,dpr=1,groundY=0,playing=false,last=0,score=0;
+  const ship={x:0,y:0,targetX:0,targetY:0,w:220,h:90,health:100,cooldown:0};
+  const stars=[],lasers=[],enemyShots=[],particles=[],cities=[];
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    w=window.innerWidth;h=window.innerHeight;
+    canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    groundY=h*0.82;
+    if(!playing){ship.x=w*0.5;ship.y=h*0.24;ship.targetX=ship.x;ship.targetY=ship.y;}
+    initCities();
+  }
+
+  function rand(a,b){return a+Math.random()*(b-a);}
+  function initStars(){stars.length=0;for(let i=0;i<220;i++)stars.push({x:rand(0,w),y:rand(0,h),z:rand(.3,1.8),a:rand(.2,1)});}  
+  function initCities(){cities.length=0; const n=Math.max(6,Math.floor(w/170)); const pad=w*0.05; for(let i=0;i<n;i++){const cw=rand(48,95),ch=rand(60,170); const x=pad+i*((w-pad*2)/n)+rand(-10,10);cities.push({x,y:groundY-ch,w:cw,h:ch,hp:100,alive:true,t:Math.random()*10});}}
+
+  function resetGame(){
+    score=0; ship.health=100; ship.cooldown=0;
+    ship.x=w*0.5; ship.y=h*0.23; ship.targetX=ship.x; ship.targetY=ship.y;
+    lasers.length=enemyShots.length=particles.length=0;
+    initCities();
+    statusEl.textContent='Атака';
+    updateHud();
+  }
+
+  function spawnExplosion(x,y,color='#ffb56b',count=32,speed=4){
+    for(let i=0;i<count;i++){
+      const a=Math.random()*Math.PI*2,s=rand(.5,speed);
+      particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(24,54),max:55,size:rand(1.4,3.8),color});
+    }
+  }
+
+  function shootLaser(){ if(ship.cooldown>0||!playing) return; ship.cooldown=12; lasers.push({x:ship.x,y:ship.y+ship.h*0.16,vx:0,vy:10,life:48}); }
+
+  function fireEnemy(){
+    const alive=cities.filter(c=>c.alive); if(!alive.length) return;
+    const c=alive[(Math.random()*alive.length)|0];
+    enemyShots.push({x:c.x+c.w*0.5,y:c.y,vx:(ship.x-(c.x+c.w*.5))*0.008,vy:-rand(3.4,4.6),life:140});
+  }
+
+  function update(dt){
+    ship.x += (ship.targetX-ship.x)*Math.min(1,dt*10);
+    ship.y += (ship.targetY-ship.y)*Math.min(1,dt*10);
+    ship.x = Math.max(ship.w*0.3,Math.min(w-ship.w*0.3,ship.x));
+    ship.y = Math.max(h*0.08,Math.min(groundY-ship.h*1.8,ship.y));
+    if(ship.cooldown>0) ship.cooldown-=1;
+
+    for(let i=lasers.length-1;i>=0;i--){
+      const l=lasers[i]; l.x+=l.vx; l.y+=l.vy; l.life--;
+      let hit=false;
+      for(const c of cities){
+        if(!c.alive) continue;
+        if(l.x>c.x&&l.x<c.x+c.w&&l.y>c.y&&l.y<c.y+c.h){ c.hp-=50; hit=true; spawnExplosion(l.x,l.y,'#ffea8a',22,3.6); if(c.hp<=0){c.alive=false; score++; spawnExplosion(c.x+c.w/2,c.y+c.h/2,'#ff7b63',60,5.2);} break; }
+      }
+      if(hit||l.life<=0||l.y>groundY) lasers.splice(i,1);
+    }
+
+    for(let i=enemyShots.length-1;i>=0;i--){
+      const s=enemyShots[i]; s.x+=s.vx; s.y+=s.vy; s.life--;
+      if(Math.hypot(s.x-ship.x,s.y-(ship.y+ship.h*.1))<ship.w*0.26){ ship.health-=rand(5,9); spawnExplosion(s.x,s.y,'#8ff4ff',20,3.3); enemyShots.splice(i,1); continue; }
+      if(s.life<=0||s.y<0) enemyShots.splice(i,1);
+    }
+
+    if(Math.random()<0.03+score*0.0015) fireEnemy();
+
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.015; p.life--; p.size*=0.992; if(p.life<=0) particles.splice(i,1);}    
+
+    if(ship.health<=0){ ship.health=0; statusEl.textContent='Поражение'; playing=false; startScreen.classList.remove('hidden'); }
+    if(cities.every(c=>!c.alive)){ statusEl.textContent='Победа'; playing=false; startScreen.classList.remove('hidden'); }
+    updateHud();
+  }
+
+  function drawBackground(t){
+    const g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#060d24'); g.addColorStop(.55,'#090916'); g.addColorStop(1,'#140b14'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    for(const s of stars){const tw=0.5+Math.sin((t*0.001+s.x)*1.2)*0.5; ctx.fillStyle=`rgba(190,235,255,${(s.a*(0.4+tw*0.6)).toFixed(3)})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.z*(0.8+tw*0.3),0,Math.PI*2); ctx.fill();}
+    ctx.fillStyle='rgba(90, 130, 255, 0.11)'; ctx.beginPath(); ctx.arc(w*.15,h*.18,90,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(200, 80, 255, 0.08)'; ctx.beginPath(); ctx.arc(w*.85,h*.12,120,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawShip(){
+    ctx.save(); ctx.translate(ship.x,ship.y);
+    const glow=ctx.createRadialGradient(0,15,8,0,15,160); glow.addColorStop(0,'rgba(130,235,255,.55)'); glow.addColorStop(1,'rgba(130,235,255,0)'); ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(0,16,130,48,0,0,Math.PI*2); ctx.fill();
+    const hull=ctx.createLinearGradient(-140,-20,140,35); hull.addColorStop(0,'#7287a2'); hull.addColorStop(.4,'#d7edf6'); hull.addColorStop(1,'#6e7d97');
+    ctx.fillStyle=hull; ctx.beginPath(); ctx.moveTo(-120,20); ctx.quadraticCurveTo(-40,-42,0,-35); ctx.quadraticCurveTo(40,-42,120,20); ctx.quadraticCurveTo(0,55,-120,20); ctx.fill();
+    ctx.fillStyle='rgba(16,25,40,.9)'; ctx.beginPath(); ctx.ellipse(0,5,55,21,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(90,245,255,.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(0,22,95,23,0,0,Math.PI*2); ctx.stroke();
+    for(let i=-2;i<=2;i++){ctx.fillStyle='rgba(80,245,255,.7)'; ctx.fillRect(i*24-3,17,6,8);}    
+    ctx.restore();
+  }
+
+  function drawCities(t){
+    ctx.fillStyle='rgba(20,28,42,.95)'; ctx.fillRect(0,groundY,w,h-groundY);
+    for(const c of cities){
+      if(!c.alive) continue;
+      const shimmer=(Math.sin(t*0.003+c.t)+1)/2;
+      const b=ctx.createLinearGradient(c.x,c.y,c.x,c.y+c.h); b.addColorStop(0,'#192a45'); b.addColorStop(1,'#0d1422'); ctx.fillStyle=b; ctx.fillRect(c.x,c.y,c.w,c.h);
+      for(let wy=0;wy<c.h-8;wy+=12){ for(let wx=5;wx<c.w-6;wx+=10){ if(Math.random()<0.06) continue; ctx.fillStyle=`rgba(90,220,255,${0.15+shimmer*0.65})`; ctx.fillRect(c.x+wx,c.y+wy,4,6);} }
+      ctx.strokeStyle='rgba(72,174,255,.35)'; ctx.strokeRect(c.x,c.y,c.w,c.h);
+    }
+  }
+
+  function drawEffects(){
+    for(const l of lasers){ctx.strokeStyle='rgba(130,255,170,.95)'; ctx.lineWidth=3.1; ctx.shadowBlur=14; ctx.shadowColor='#9bff9b'; ctx.beginPath(); ctx.moveTo(l.x,l.y-16); ctx.lineTo(l.x,l.y+18); ctx.stroke(); ctx.shadowBlur=0;}
+    for(const s of enemyShots){ctx.strokeStyle='rgba(255,92,120,.95)'; ctx.lineWidth=2.4; ctx.shadowBlur=10; ctx.shadowColor='#ff4d6d'; ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(s.x-s.vx*4,s.y-s.vy*4); ctx.stroke(); ctx.shadowBlur=0;}
+    for(const p of particles){ctx.fillStyle=p.color; ctx.globalAlpha=Math.max(0,p.life/p.max); ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();} ctx.globalAlpha=1;
+  }
+
+  function draw(t){ drawBackground(t); drawShip(); drawCities(t); drawEffects(); }
+  function updateHud(){ scoreEl.textContent=String(score); healthFill.style.width=`${ship.health}%`; }
+
+  function loop(ts){ const dt=Math.min(.033,(ts-last)/1000||.016); last=ts; if(playing) update(dt); draw(ts); requestAnimationFrame(loop); }
+
+  function setTarget(x,y){ ship.targetX=x; ship.targetY=y; }
+  window.addEventListener('pointermove',e=>setTarget(e.clientX,e.clientY));
+  window.addEventListener('pointerdown',e=>{ setTarget(e.clientX,e.clientY); shootLaser(); });
+  window.addEventListener('pointerup',()=>{});
+  window.addEventListener('resize',resize);
+  playBtn.addEventListener('click',()=>{ startScreen.classList.add('hidden'); playing=true; resetGame(); });
+
+  resize(); initStars(); updateHud(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
